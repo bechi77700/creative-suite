@@ -29,6 +29,8 @@ export default function HistoryPage({ params }: { params: { id: string } }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [variationsLoading, setVariationsLoading] = useState<string | null>(null);
   const [variationsOutput, setVariationsOutput] = useState<Record<string, string>>({});
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
 
   const fetchData = async () => {
     const [proj, hist] = await Promise.all([
@@ -62,6 +64,39 @@ export default function HistoryPage({ params }: { params: { id: string } }) {
 
   const copyText = (text: string) => navigator.clipboard.writeText(text);
 
+  const deleteOne = async (genId: string) => {
+    if (!confirm('Delete this generation? This cannot be undone.')) return;
+    await fetch(`/api/history/${genId}`, { method: 'DELETE' });
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.delete(genId);
+      return next;
+    });
+    if (expanded === genId) setExpanded(null);
+    fetchData();
+  };
+
+  const toggleSelected = (genId: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(genId)) next.delete(genId);
+      else next.add(genId);
+      return next;
+    });
+  };
+
+  const deleteSelected = async () => {
+    if (selected.size === 0) return;
+    if (!confirm(`Delete ${selected.size} generation${selected.size > 1 ? 's' : ''}? This cannot be undone.`)) return;
+    setDeleting(true);
+    await Promise.all(
+      Array.from(selected).map((id) => fetch(`/api/history/${id}`, { method: 'DELETE' })),
+    );
+    setSelected(new Set());
+    setDeleting(false);
+    fetchData();
+  };
+
   const filtered = filter === 'winners'
     ? generations.filter((g) => g.isWinner)
     : generations;
@@ -89,7 +124,16 @@ export default function HistoryPage({ params }: { params: { id: string } }) {
                 All outputs for {projectName}. Mark winners to influence future generations.
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
+              {selected.size > 0 && (
+                <button
+                  onClick={deleteSelected}
+                  disabled={deleting}
+                  className="px-3 py-1.5 rounded text-xs font-medium border border-accent-red/40 bg-accent-red/10 text-accent-red hover:bg-accent-red/20 transition-colors"
+                >
+                  {deleting ? 'Deleting…' : `🗑 Delete ${selected.size}`}
+                </button>
+              )}
               <button
                 onClick={() => setFilter('all')}
                 className={filter === 'all' ? 'tag-active' : 'tag-inactive'}
@@ -127,6 +171,14 @@ export default function HistoryPage({ params }: { params: { id: string } }) {
                       onClick={() => setExpanded(isExpanded ? null : gen.id)}
                     >
                       <div className="flex items-center gap-3 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={selected.has(gen.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={() => toggleSelected(gen.id)}
+                          className="w-3.5 h-3.5 cursor-pointer"
+                          title="Select for bulk delete"
+                        />
                         {gen.isWinner && <span className="text-accent-gold text-xs">★</span>}
                         <span className={`text-xs font-medium px-2 py-0.5 rounded border ${meta.color}`}>
                           {meta.icon} {meta.label}
@@ -141,6 +193,13 @@ export default function HistoryPage({ params }: { params: { id: string } }) {
                             month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
                           })}
                         </span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); deleteOne(gen.id); }}
+                          className="text-text-muted hover:text-accent-red text-xs transition-colors"
+                          title="Delete this generation"
+                        >
+                          🗑
+                        </button>
                         <span className="text-text-muted text-xs">{isExpanded ? '▲' : '▼'}</span>
                       </div>
                     </div>
@@ -178,6 +237,12 @@ export default function HistoryPage({ params }: { params: { id: string } }) {
                             )}
                             <button onClick={() => copyText(gen.output)} className="btn-secondary text-xs px-3 py-1">
                               Copy
+                            </button>
+                            <button
+                              onClick={() => deleteOne(gen.id)}
+                              className="px-3 py-1 rounded text-xs font-medium border border-accent-red/40 text-accent-red hover:bg-accent-red/10 transition-colors"
+                            >
+                              🗑 Delete
                             </button>
                           </div>
                         </div>
