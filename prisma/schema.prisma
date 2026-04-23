@@ -1,0 +1,51 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model BrandProject {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  documents   BrandDocument[]
+  generations Generation[]
+}
+
+model BrandDocument {
+  id        String   @id @default(cuid())
+  projectId String
+  project   BrandProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  type      String
+  mimeType  String
+  content   String
+  size      Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+model GlobalKnowledge {
+  id        String   @id @default(cuid())
+  name      String
+  category  String
+  mimeType  String
+  content   String
+  size      Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+model Generation {
+  id        String   @id @default(cuid())
+  projectId String
+  project   BrandProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  module    String
+  inputs    String
+  output    String
+  isWinner  Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
