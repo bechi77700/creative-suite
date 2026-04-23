@@ -17,8 +17,24 @@ interface ImageState {
   error?: string;
 }
 
+interface Run {
+  id: string;
+  mode: Mode;
+  product: string;
+  count: number;
+  withImages: boolean;
+  streamedText: string;
+  generationId: string | null;
+  isWinner: boolean;
+  imageStates: Record<string, ImageState>;
+  iteratingPromptText: string | null;
+  loading: boolean;
+  error: string;
+  imageModel: string;
+  productRefImages: RefImage[];
+}
+
 // Parse all CLOSED triple-backtick code blocks from a (possibly partial) markdown string.
-// Returns the inner text of each closed block, in order.
 function extractClosedCodeBlocks(text: string): string[] {
   const regex = /```[a-zA-Z0-9_-]*\n([\s\S]*?)```/g;
   const out: string[] = [];
@@ -29,7 +45,6 @@ function extractClosedCodeBlocks(text: string): string[] {
   return out;
 }
 
-// Parse SSE stream chunks. Yields event objects { event, data }.
 async function* parseSSE(stream: ReadableStream<Uint8Array>) {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
@@ -88,24 +103,11 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
   // Image model
   const [imageModel, setImageModel] = useState('nano-banana-2');
 
-  // Output
-  const [loading, setLoading] = useState(false);
-  const [streamedText, setStreamedText] = useState('');
-  const [generationId, setGenerationId] = useState<string | null>(null);
-  const [isWinner, setIsWinner] = useState(false);
-  const [error, setError] = useState('');
+  // Stack of runs
+  const [runs, setRuns] = useState<Run[]>([]);
 
-  // Per-prompt image states (keyed by promptText)
-  const [imageStates, setImageStates] = useState<Record<string, ImageState>>({});
-  const [autoImagesEnabled, setAutoImagesEnabled] = useState(false);
-
-  // Track which prompt has its iterate panel open
-  const [iteratingPromptText, setIteratingPromptText] = useState<string | null>(null);
-
-  // Track which prompts we've already kicked off image gen for (avoid duplicates during streaming)
-  const firedImagePromptsRef = useRef<Set<string>>(new Set());
-  // Track current run mode in case user retries
-  const currentModeRef = useRef<Mode>('scratch');
+  // Per-run, per-prompt fired image tracking
+  const firedImagePromptsRef = useRef<Map<string, Set<string>>>(new Map());
 
   useEffect(() => {
     fetch(`/api/projects/${id}`).then((r) => r.json()).then((d) => {
@@ -114,45 +116,65 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
     });
   }, [id]);
 
-  // Fire image generation for a single prompt (called as prompts complete during streaming)
-  const fireImageGen = async (promptText: string) => {
-    setImageStates((prev) => ({ ...prev, [promptText]: { status: 'generating' } }));
+  const updateRun = (runId: string, patch: Partial<Run> | ((r: Run) => Partial<Run>)) => {
+    setRuns((prev) =>
+      prev.map((r) => {
+        if (r.id !== runId) return r;
+        const p = typeof patch === 'function' ? patch(r) : patch;
+        return { ...r, ...p };
+      }),
+    );
+  };
+
+  const fireImageGen = async (runId: string, promptText: string) => {
+    const runSnap = runs.find((r) => r.id === runId);
+    const modelToUse = runSnap?.imageModel ?? imageModel;
+    const refsToUse = runSnap?.productRefImages ?? productRefImages;
+
+    updateRun(runId, (r) => ({
+      imageStates: { ...r.imageStates, [promptText]: { status: 'generating' } },
+    }));
 
     let referenceImages: Array<{ base64: string; mimeType: string }> | undefined;
-    const currentImageModelConfig = IMAGE_MODELS.find((m) => m.value === imageModel);
-    if (currentImageModelConfig?.allowsRef && productRefImages.length > 0) {
-      referenceImages = productRefImages.map((r) => ({ base64: r.base64, mimeType: r.mimeType }));
+    const currentImageModelConfig = IMAGE_MODELS.find((m) => m.value === modelToUse);
+    if (currentImageModelConfig?.allowsRef && refsToUse.length > 0) {
+      referenceImages = refsToUse.map((r) => ({ base64: r.base64, mimeType: r.mimeType }));
     }
 
     try {
       const res = await fetch('/api/generate/image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: promptText,
-          model: imageModel,
-          referenceImages,
-        }),
+        body: JSON.stringify({ prompt: promptText, model: modelToUse, referenceImages }),
       });
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: `Server error ${res.status}` }));
-        setImageStates((prev) => ({
-          ...prev,
-          [promptText]: { status: 'error', error: err.error || `Error ${res.status}` },
+        updateRun(runId, (r) => ({
+          imageStates: {
+            ...r.imageStates,
+            [promptText]: { status: 'error', error: err.error || `Error ${res.status}` },
+          },
         }));
         return;
       }
 
       const data = await res.json();
-      setImageStates((prev) => ({
-        ...prev,
-        [promptText]: { status: 'done', url: data.imageUrl },
+      updateRun(runId, (r) => ({
+        imageStates: {
+          ...r.imageStates,
+          [promptText]: { status: 'done', url: data.imageUrl },
+        },
       }));
     } catch (e) {
-      setImageStates((prev) => ({
-        ...prev,
-        [promptText]: { status: 'error', error: e instanceof Error ? e.message : 'Unexpected error' },
+      updateRun(runId, (r) => ({
+        imageStates: {
+          ...r.imageStates,
+          [promptText]: {
+            status: 'error',
+            error: e instanceof Error ? e.message : 'Unexpected error',
+          },
+        },
       }));
     }
   };
@@ -162,18 +184,28 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
     if (mode === 'clone' && competitorImages.length === 0) return;
     const n = Math.max(1, parseInt(count) || 1);
 
-    // Reset
-    setLoading(true);
-    setStreamedText('');
-    setError('');
-    setGenerationId(null);
-    setIsWinner(false);
-    setImageStates({});
-    firedImagePromptsRef.current = new Set();
-    setAutoImagesEnabled(withImages);
-    currentModeRef.current = mode;
+    const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const newRun: Run = {
+      id: runId,
+      mode,
+      product,
+      count: n,
+      withImages,
+      streamedText: '',
+      generationId: null,
+      isWinner: false,
+      imageStates: {},
+      iteratingPromptText: null,
+      loading: true,
+      error: '',
+      imageModel,
+      productRefImages,
+    };
 
-    // Build the array of competitor screenshots for clone mode
+    // Append at top so the new run appears first
+    setRuns((prev) => [newRun, ...prev]);
+    firedImagePromptsRef.current.set(runId, new Set());
+
     const competitorRefs = mode === 'clone'
       ? competitorImages.map((r) => ({ base64: r.base64, mimeType: r.mimeType }))
       : [];
@@ -194,14 +226,12 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
       });
 
       if (!res.ok || !res.body) {
-        // Non-streaming error
         let errMsg = `Server error ${res.status}`;
         try {
           const err = await res.json();
           errMsg = err.error || errMsg;
         } catch { /* noop */ }
-        setError(errMsg);
-        setLoading(false);
+        updateRun(runId, { error: errMsg, loading: false });
         return;
       }
 
@@ -211,46 +241,64 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
         if (evt.event === 'text') {
           const chunk = (evt.data as { text: string }).text;
           accumulated += chunk;
-          setStreamedText(accumulated);
+          updateRun(runId, { streamedText: accumulated });
 
-          // Detect newly completed code blocks → fire image gen
           if (withImages) {
             const blocks = extractClosedCodeBlocks(accumulated);
+            const fired = firedImagePromptsRef.current.get(runId)!;
             for (const block of blocks) {
-              if (!firedImagePromptsRef.current.has(block)) {
-                firedImagePromptsRef.current.add(block);
-                // fire & forget
-                fireImageGen(block);
+              if (!fired.has(block)) {
+                fired.add(block);
+                fireImageGen(runId, block);
               }
             }
           }
         } else if (evt.event === 'done') {
           const data = evt.data as { generationId: string };
-          setGenerationId(data.generationId);
+          updateRun(runId, { generationId: data.generationId });
         } else if (evt.event === 'error') {
           const data = evt.data as { error: string };
-          setError(data.error);
+          updateRun(runId, { error: data.error });
         }
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unexpected error — check console');
+      updateRun(runId, { error: e instanceof Error ? e.message : 'Unexpected error — check console' });
     }
 
-    setLoading(false);
+    updateRun(runId, { loading: false });
   };
 
-  const toggleWinner = async () => {
-    if (!generationId) return;
+  const toggleWinner = async (runId: string, generationId: string) => {
     const res = await fetch(`/api/history/${generationId}/winner`, { method: 'PATCH' });
     const data = await res.json();
-    setIsWinner(data.isWinner);
+    updateRun(runId, { isWinner: data.isWinner });
+  };
+
+  const deleteRun = async (runId: string) => {
+    const run = runs.find((r) => r.id === runId);
+    if (!run) return;
+    if (!confirm('Delete this generation?')) return;
+    if (run.generationId) {
+      try {
+        await fetch(`/api/history/${run.generationId}`, { method: 'DELETE' });
+      } catch { /* noop — still remove locally */ }
+    }
+    firedImagePromptsRef.current.delete(runId);
+    setRuns((prev) => prev.filter((r) => r.id !== runId));
+  };
+
+  const clearAll = () => {
+    if (runs.length === 0) return;
+    if (!confirm(`Clear all ${runs.length} generation${runs.length !== 1 ? 's' : ''} from this view? (Saved generations stay in History.)`)) return;
+    setRuns([]);
+    firedImagePromptsRef.current.clear();
   };
 
   const copyText = (text: string) => navigator.clipboard.writeText(text);
 
-  const exportTxt = () => {
-    if (!streamedText) return;
-    const blob = new Blob([streamedText], { type: 'text/plain' });
+  const exportTxt = (run: Run) => {
+    if (!run.streamedText) return;
+    const blob = new Blob([run.streamedText], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -260,8 +308,7 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
 
   const n = Math.max(1, parseInt(count) || 1);
   const canGenerate = product.trim() && (mode === 'scratch' || competitorImages.length > 0);
-
-  // Pre-loaded product reference images forwarded to each PromptImageGenerator child
+  const anyLoading = runs.some((r) => r.loading);
   const initialImagesForChild = productRefImages;
 
   return (
@@ -284,7 +331,7 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
             {/* Mode toggle */}
             <div className="flex gap-1.5 mt-4">
               <button
-                onClick={() => { setMode('scratch'); setStreamedText(''); }}
+                onClick={() => setMode('scratch')}
                 className={`flex-1 py-2 rounded-md text-xs font-medium border transition-colors ${
                   mode === 'scratch'
                     ? 'bg-accent-gold text-bg-base border-accent-gold'
@@ -294,7 +341,7 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
                 From Scratch
               </button>
               <button
-                onClick={() => { setMode('clone'); setStreamedText(''); }}
+                onClick={() => setMode('clone')}
                 className={`flex-1 py-2 rounded-md text-xs font-medium border transition-colors ${
                   mode === 'clone'
                     ? 'bg-accent-gold text-bg-base border-accent-gold'
@@ -453,197 +500,40 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
             <button
               onClick={() => handleGenerate(true)}
               className="btn-primary w-full"
-              disabled={loading || !canGenerate}
+              disabled={anyLoading || !canGenerate}
             >
-              {loading && autoImagesEnabled
-                ? `Generating ${n} prompt${n !== 1 ? 's' : ''} + image${n !== 1 ? 's' : ''}…`
+              {anyLoading
+                ? `Generating…`
                 : `Generate ${n} Prompt${n !== 1 ? 's' : ''} + Image${n !== 1 ? 's' : ''}`}
             </button>
             <button
               onClick={() => handleGenerate(false)}
               className="btn-secondary w-full text-xs"
-              disabled={loading || !canGenerate}
+              disabled={anyLoading || !canGenerate}
             >
-              {loading && !autoImagesEnabled
-                ? `Generating ${n} prompt${n !== 1 ? 's' : ''}…`
-                : `Generate prompts only`}
+              {anyLoading ? `Generating…` : `Generate prompts only`}
             </button>
             {mode === 'clone' && competitorImages.length === 0 && (
               <p className="text-accent-red/60 text-[10px] text-center">
                 Upload a competitor ad to use Clone mode
               </p>
             )}
+            {runs.length > 0 && (
+              <button
+                onClick={clearAll}
+                className="text-text-muted hover:text-accent-red text-[10px] uppercase tracking-widest w-full text-center pt-1 transition-colors"
+              >
+                Clear all ({runs.length})
+              </button>
+            )}
           </div>
         </div>
 
         {/* ── Right panel ── */}
-        <div className="flex-1 overflow-y-auto p-6">
-
-          {/* Error */}
-          {error && (
-            <div className="border border-accent-red/40 bg-accent-red/5 rounded-lg px-4 py-3 mb-4 flex items-start gap-3">
-              <span className="text-accent-red text-sm mt-0.5">✕</span>
-              <div>
-                <p className="text-accent-red text-sm font-medium">Generation failed</p>
-                <p className="text-text-secondary text-xs mt-0.5">{error}</p>
-              </div>
-              <button onClick={() => setError('')} className="ml-auto text-text-muted hover:text-text-secondary text-xs">Dismiss</button>
-            </div>
-          )}
-
-          {/* Result / streaming view */}
-          {(streamedText || loading) && (
-            <div className="space-y-4">
-              {/* Top bar */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className={`text-xs font-medium px-2.5 py-1 rounded border ${
-                    currentModeRef.current === 'clone'
-                      ? 'text-accent-blue border-accent-blue/30 bg-accent-blue/10'
-                      : 'text-accent-gold border-accent-gold/30 bg-accent-gold/10'
-                  }`}>
-                    {currentModeRef.current === 'clone' ? 'Clone & Adapt' : 'From Scratch'}
-                  </span>
-                  <span className="text-text-muted text-xs">
-                    {n} prompt{n !== 1 ? 's' : ''} · {product}
-                    {loading && <span className="ml-2 text-accent-gold animate-pulse">● streaming…</span>}
-                  </span>
-                </div>
-                {!loading && generationId && (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={toggleWinner}
-                      className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors ${
-                        isWinner
-                          ? 'bg-accent-gold/20 border-accent-gold/60 text-accent-gold'
-                          : 'border-bg-border text-text-muted hover:border-accent-gold/40 hover:text-accent-gold'
-                      }`}
-                    >
-                      {isWinner ? '★ Winner' : '☆ Mark Winner'}
-                    </button>
-                    {n >= 2 && (
-                      <button onClick={exportTxt} className="btn-secondary text-xs px-3 py-1.5">
-                        Export TXT
-                      </button>
-                    )}
-                    <button onClick={() => copyText(streamedText)} className="btn-secondary text-xs px-3 py-1.5">
-                      Copy All
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Output */}
-              <div className="card">
-                <div className="p-6 result-content">
-                  {!streamedText && loading ? (
-                    <div className="flex items-center gap-3 text-text-muted text-sm">
-                      <div className="w-4 h-4 border-2 border-accent-gold/30 border-t-accent-gold rounded-full animate-spin" />
-                      Waiting for first tokens…
-                    </div>
-                  ) : (
-                    <ReactMarkdown
-                      components={{
-                        code({ children, className }) {
-                          const isBlock = className || String(children).includes('\n');
-                          const promptText = String(children).trim();
-                          if (isBlock) {
-                            const imgState = imageStates[promptText];
-                            return (
-                              <div className="my-3">
-                                <div className="relative group">
-                                  <pre className="bg-bg-base border border-accent-gold/25 rounded-lg p-5 text-xs text-text-primary font-mono leading-relaxed overflow-x-auto whitespace-pre-wrap">
-                                    {children}
-                                  </pre>
-                                  <div className="absolute top-2.5 right-2.5 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button
-                                      onClick={() =>
-                                        setIteratingPromptText(
-                                          iteratingPromptText === promptText ? null : promptText,
-                                        )
-                                      }
-                                      className={`text-xs px-2.5 py-1 rounded border transition-colors ${
-                                        iteratingPromptText === promptText
-                                          ? 'bg-accent-gold/20 border-accent-gold/60 text-accent-gold'
-                                          : 'btn-secondary'
-                                      }`}
-                                    >
-                                      {iteratingPromptText === promptText ? '✕ Iterate' : '↻ Iterate'}
-                                    </button>
-                                    <button
-                                      onClick={() => copyText(promptText)}
-                                      className="btn-secondary text-xs px-2.5 py-1"
-                                    >
-                                      Copy
-                                    </button>
-                                  </div>
-                                </div>
-
-                                {iteratingPromptText === promptText && (
-                                  <IteratePanel
-                                    projectId={id}
-                                    originalPrompt={promptText}
-                                    initialImages={initialImagesForChild}
-                                    onClose={() => setIteratingPromptText(null)}
-                                  />
-                                )}
-
-                                {/* Per-prompt image area */}
-                                {imgState?.status === 'generating' && (
-                                  <div className="border border-bg-border rounded-lg p-6 mt-3 bg-bg-base/50 flex items-center justify-center gap-3">
-                                    <div className="w-5 h-5 border-2 border-accent-gold/30 border-t-accent-gold rounded-full animate-spin" />
-                                    <span className="text-text-muted text-xs">Generating image…</span>
-                                  </div>
-                                )}
-                                {imgState?.status === 'error' && (
-                                  <div className="border border-accent-red/40 bg-accent-red/5 rounded-lg p-3 mt-3">
-                                    <p className="text-accent-red text-xs font-medium">Image generation failed</p>
-                                    <p className="text-text-secondary text-xs mt-0.5">{imgState.error}</p>
-                                    <PromptImageGenerator
-                                      prompt={promptText}
-                                      initialImages={initialImagesForChild}
-                                      initialModel={imageModel}
-                                    />
-                                  </div>
-                                )}
-                                {imgState?.status === 'done' && imgState.url && (
-                                  <PromptImageGenerator
-                                    key={`${promptText}-done`}
-                                    prompt={promptText}
-                                    initialImages={initialImagesForChild}
-                                    initialModel={imageModel}
-                                    autoGenerateImageUrl={imgState.url}
-                                  />
-                                )}
-                                {!imgState && !loading && (
-                                  <PromptImageGenerator
-                                    key={`${promptText}-manual`}
-                                    prompt={promptText}
-                                    initialImages={initialImagesForChild}
-                                    initialModel={imageModel}
-                                  />
-                                )}
-                              </div>
-                            );
-                          }
-                          return (
-                            <code className="bg-bg-base px-1.5 py-0.5 rounded text-xs font-mono text-accent-gold">
-                              {children}
-                            </code>
-                          );
-                        },
-                      }}
-                    >
-                      {streamedText}
-                    </ReactMarkdown>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
 
           {/* Empty state */}
-          {!streamedText && !loading && !error && (
+          {runs.length === 0 && (
             <div className="card p-16 text-center">
               <p className="text-text-muted text-5xl mb-5">▣</p>
               <p className="text-text-primary font-medium text-base mb-2">
@@ -656,8 +546,230 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
               </p>
             </div>
           )}
+
+          {/* All runs, newest at top */}
+          {runs.map((run) => (
+            <RunCard
+              key={run.id}
+              run={run}
+              projectId={id}
+              initialImagesForChild={initialImagesForChild}
+              onToggleWinner={() => run.generationId && toggleWinner(run.id, run.generationId)}
+              onDelete={() => deleteRun(run.id)}
+              onCopyAll={() => copyText(run.streamedText)}
+              onExport={() => exportTxt(run)}
+              onCopyPrompt={(t) => copyText(t)}
+              onSetIterating={(t) => updateRun(run.id, { iteratingPromptText: t })}
+              onDismissError={() => updateRun(run.id, { error: '' })}
+            />
+          ))}
         </div>
       </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RunCard — renders one generation run
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface RunCardProps {
+  run: Run;
+  projectId: string;
+  initialImagesForChild: RefImage[];
+  onToggleWinner: () => void;
+  onDelete: () => void;
+  onCopyAll: () => void;
+  onExport: () => void;
+  onCopyPrompt: (text: string) => void;
+  onSetIterating: (text: string | null) => void;
+  onDismissError: () => void;
+}
+
+function RunCard({
+  run,
+  projectId,
+  initialImagesForChild,
+  onToggleWinner,
+  onDelete,
+  onCopyAll,
+  onExport,
+  onCopyPrompt,
+  onSetIterating,
+  onDismissError,
+}: RunCardProps) {
+  return (
+    <div className="space-y-4 group/run">
+      {run.error && (
+        <div className="border border-accent-red/40 bg-accent-red/5 rounded-lg px-4 py-3 flex items-start gap-3">
+          <span className="text-accent-red text-sm mt-0.5">✕</span>
+          <div>
+            <p className="text-accent-red text-sm font-medium">Generation failed</p>
+            <p className="text-text-secondary text-xs mt-0.5">{run.error}</p>
+          </div>
+          <button onClick={onDismissError} className="ml-auto text-text-muted hover:text-text-secondary text-xs">Dismiss</button>
+        </div>
+      )}
+
+      {(run.streamedText || run.loading) && (
+        <>
+          {/* Top bar */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className={`text-xs font-medium px-2.5 py-1 rounded border ${
+                run.mode === 'clone'
+                  ? 'text-accent-blue border-accent-blue/30 bg-accent-blue/10'
+                  : 'text-accent-gold border-accent-gold/30 bg-accent-gold/10'
+              }`}>
+                {run.mode === 'clone' ? 'Clone & Adapt' : 'From Scratch'}
+              </span>
+              <span className="text-text-muted text-xs">
+                {run.count} prompt{run.count !== 1 ? 's' : ''} · {run.product}
+                {run.loading && <span className="ml-2 text-accent-gold animate-pulse">● streaming…</span>}
+              </span>
+            </div>
+            <div className="flex gap-2 items-center">
+              {!run.loading && run.generationId && (
+                <>
+                  <button
+                    onClick={onToggleWinner}
+                    className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors ${
+                      run.isWinner
+                        ? 'bg-accent-gold/20 border-accent-gold/60 text-accent-gold'
+                        : 'border-bg-border text-text-muted hover:border-accent-gold/40 hover:text-accent-gold'
+                    }`}
+                  >
+                    {run.isWinner ? '★ Winner' : '☆ Mark Winner'}
+                  </button>
+                  {run.count >= 2 && (
+                    <button onClick={onExport} className="btn-secondary text-xs px-3 py-1.5">
+                      Export TXT
+                    </button>
+                  )}
+                  <button onClick={onCopyAll} className="btn-secondary text-xs px-3 py-1.5">
+                    Copy All
+                  </button>
+                </>
+              )}
+              {/* Discreet delete — only visible on hover */}
+              <button
+                onClick={onDelete}
+                title="Delete this generation"
+                className="text-text-muted/40 hover:text-accent-red text-sm w-7 h-7 flex items-center justify-center rounded transition-colors opacity-0 group-hover/run:opacity-100"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          {/* Output */}
+          <div className="card">
+            <div className="p-6 result-content">
+              {!run.streamedText && run.loading ? (
+                <div className="flex items-center gap-3 text-text-muted text-sm">
+                  <div className="w-4 h-4 border-2 border-accent-gold/30 border-t-accent-gold rounded-full animate-spin" />
+                  Waiting for first tokens…
+                </div>
+              ) : (
+                <ReactMarkdown
+                  components={{
+                    code({ children, className }) {
+                      const isBlock = className || String(children).includes('\n');
+                      const promptText = String(children).trim();
+                      if (isBlock) {
+                        const imgState = run.imageStates[promptText];
+                        return (
+                          <div className="my-3">
+                            <div className="relative group">
+                              <pre className="bg-bg-base border border-accent-gold/25 rounded-lg p-5 text-xs text-text-primary font-mono leading-relaxed overflow-x-auto whitespace-pre-wrap">
+                                {children}
+                              </pre>
+                              <div className="absolute top-2.5 right-2.5 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={() =>
+                                    onSetIterating(
+                                      run.iteratingPromptText === promptText ? null : promptText,
+                                    )
+                                  }
+                                  className={`text-xs px-2.5 py-1 rounded border transition-colors ${
+                                    run.iteratingPromptText === promptText
+                                      ? 'bg-accent-gold/20 border-accent-gold/60 text-accent-gold'
+                                      : 'btn-secondary'
+                                  }`}
+                                >
+                                  {run.iteratingPromptText === promptText ? '✕ Iterate' : '↻ Iterate'}
+                                </button>
+                                <button
+                                  onClick={() => onCopyPrompt(promptText)}
+                                  className="btn-secondary text-xs px-2.5 py-1"
+                                >
+                                  Copy
+                                </button>
+                              </div>
+                            </div>
+
+                            {run.iteratingPromptText === promptText && (
+                              <IteratePanel
+                                projectId={projectId}
+                                originalPrompt={promptText}
+                                initialImages={initialImagesForChild}
+                                onClose={() => onSetIterating(null)}
+                              />
+                            )}
+
+                            {/* Per-prompt image area */}
+                            {imgState?.status === 'generating' && (
+                              <div className="border border-bg-border rounded-lg p-6 mt-3 bg-bg-base/50 flex items-center justify-center gap-3">
+                                <div className="w-5 h-5 border-2 border-accent-gold/30 border-t-accent-gold rounded-full animate-spin" />
+                                <span className="text-text-muted text-xs">Generating image…</span>
+                              </div>
+                            )}
+                            {imgState?.status === 'error' && (
+                              <div className="border border-accent-red/40 bg-accent-red/5 rounded-lg p-3 mt-3">
+                                <p className="text-accent-red text-xs font-medium">Image generation failed</p>
+                                <p className="text-text-secondary text-xs mt-0.5">{imgState.error}</p>
+                                <PromptImageGenerator
+                                  prompt={promptText}
+                                  initialImages={initialImagesForChild}
+                                  initialModel={run.imageModel}
+                                />
+                              </div>
+                            )}
+                            {imgState?.status === 'done' && imgState.url && (
+                              <PromptImageGenerator
+                                key={`${promptText}-done`}
+                                prompt={promptText}
+                                initialImages={initialImagesForChild}
+                                initialModel={run.imageModel}
+                                autoGenerateImageUrl={imgState.url}
+                              />
+                            )}
+                            {!imgState && !run.loading && (
+                              <PromptImageGenerator
+                                key={`${promptText}-manual`}
+                                prompt={promptText}
+                                initialImages={initialImagesForChild}
+                                initialModel={run.imageModel}
+                              />
+                            )}
+                          </div>
+                        );
+                      }
+                      return (
+                        <code className="bg-bg-base px-1.5 py-0.5 rounded text-xs font-mono text-accent-gold">
+                          {children}
+                        </code>
+                      );
+                    },
+                  }}
+                >
+                  {run.streamedText}
+                </ReactMarkdown>
+              )}
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
