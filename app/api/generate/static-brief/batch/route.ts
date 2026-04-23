@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getAnthropic, MODEL, GENERATION_RULES } from '@/lib/anthropic';
+import { getAnthropic, MODEL, GENERATION_RULES, STATIC_PRODUCT_RULE } from '@/lib/anthropic';
 
 interface BatchRow {
   angle: string;
@@ -35,6 +35,7 @@ export async function POST(req: Request) {
 
   for (const row of rows) {
     const prompt = `${GENERATION_RULES}
+${STATIC_PRODUCT_RULE}
 
 BRAND: ${project.name}
 PRODUCT: ${product}

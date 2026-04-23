@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getAnthropic, MODEL, GENERATION_RULES } from '@/lib/anthropic';
+import { getAnthropic, MODEL, GENERATION_RULES, STATIC_PRODUCT_RULE } from '@/lib/anthropic';
 
 export async function POST(req: Request) {
   const body = await req.json();
@@ -19,7 +19,9 @@ export async function POST(req: Request) {
     original.module === 'static' ? 'STATIC AD BRIEF' :
     original.module === 'video' ? 'VIDEO SCRIPT' : 'HOOK SET';
 
+  const isStatic = original.module === 'static' || original.module === 'iterate';
   const prompt = `${GENERATION_RULES}
+${isStatic ? STATIC_PRODUCT_RULE : ''}
 
 BRAND: ${original.project.name}
 GLOBAL KNOWLEDGE: ${knowledgeContext || '(none)'}

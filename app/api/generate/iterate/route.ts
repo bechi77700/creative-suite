@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { getAnthropic, MODEL, GENERATION_RULES } from '@/lib/anthropic';
+import { getAnthropic, MODEL, GENERATION_RULES, STATIC_PRODUCT_RULE } from '@/lib/anthropic';
 
 export const maxDuration = 300;
 
@@ -10,7 +10,7 @@ const NANOBANANA_FORMAT = `NANOBANANA PROMPT FORMAT — use exactly this structu
 + [Camera / Angle]
 + [Composition & Layout Details]
 + [Brand Color Instructions — use brand colors from project documents]
-+ [Product Representation — always write: "use uploaded product photo as visual reference"]
++ [Product Representation — write ONLY: "use the uploaded product photo as the strict visual reference for the product — reproduce it exactly as shown, do NOT reinterpret, restyle, or redesign it." NEVER add a description of the product (no material, color of the product, parts, components, or descriptive adjectives). You MAY append a short positioning/lighting/scale instruction if it does not describe the product itself.]
 + [Specific Text: "Exact headline or claim" in "Font style description"]
 + [Clarity & Legibility Constraints]
 --ar [Aspect Ratio — choose freely: 1:1 / 4:5 / 9:16]`;
@@ -134,6 +134,7 @@ BRAND DOCUMENTS:
 ${brandContext || '(none)'}
 
 ${NANOBANANA_FORMAT}
+${STATIC_PRODUCT_RULE}
 
 ${sourceBlock}
 
@@ -167,7 +168,7 @@ ${Array.from({ length: n }, (_, i) => `
 + [Camera / Angle]
 + [Composition & Layout Details]
 + [Brand Color Instructions]
-+ [Product Representation — use uploaded product photo as visual reference]
++ [Product Representation — exactly: "use the uploaded product photo as the strict visual reference for the product — reproduce it exactly as shown, do NOT reinterpret, restyle, or redesign it." Optionally followed by a positioning/lighting/scale instruction. NEVER describe the product itself.]
 + [Specific Text: "Exact headline" in "Font style"]
 + [Clarity & Legibility Constraints]
 --ar [ratio]
