@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import PromptImageGenerator from './PromptImageGenerator';
+import { RefImage } from './MultiImageInput';
 import { parseSSE, extractClosedCodeBlocks } from '@/lib/streaming';
 
 // Image iterations are always rendered with nano-banana-2 (with the ref
@@ -30,8 +31,10 @@ interface Props {
   projectId: string;
   /** Original winning prompt — optional if a reference image is provided */
   originalPrompt?: string;
-  /** Pre-loaded ref image (forwarded from parent) — used as source AND for image gen */
+  /** Single ref image (legacy). Used if initialImages is empty/undefined. */
   initialImage?: { base64: string; mimeType: string; previewDataUri: string };
+  /** Multiple ref images (preferred). Forwarded as source AND for image gen. */
+  initialImages?: RefImage[];
   /** Optional callback when the panel is closed/dismissed */
   onClose?: () => void;
   /** Hide the close button (when used standalone on its own page) */
@@ -42,9 +45,17 @@ export default function IteratePanel({
   projectId,
   originalPrompt = '',
   initialImage,
+  initialImages,
   onClose,
   hideClose,
 }: Props) {
+  const refs: RefImage[] =
+    initialImages && initialImages.length > 0
+      ? initialImages
+      : initialImage
+      ? [initialImage]
+      : [];
+  const hasRefs = refs.length > 0;
   const [strategies, setStrategies] = useState<Set<string>>(new Set());
   const [otherInstructions, setOtherInstructions] = useState('');
   const [count, setCount] = useState('3');
@@ -69,10 +80,11 @@ export default function IteratePanel({
   const fireImageGen = async (promptText: string) => {
     setImageStates((prev) => ({ ...prev, [promptText]: { status: 'generating' } }));
 
-    // When iterating, if a reference image was provided we ALWAYS forward it
+    // When iterating, if reference images were provided we ALWAYS forward them
     // to nano-banana so the new image stays faithful to the source.
-    const referenceImageBase64 = initialImage?.base64;
-    const referenceMimeType = initialImage?.mimeType;
+    const referenceImages = hasRefs
+      ? refs.map((r) => ({ base64: r.base64, mimeType: r.mimeType }))
+      : undefined;
 
     try {
       const res = await fetch('/api/generate/image', {
@@ -81,8 +93,7 @@ export default function IteratePanel({
         body: JSON.stringify({
           prompt: promptText,
           model: IMAGE_MODEL,
-          referenceImageBase64,
-          referenceMimeType,
+          referenceImages,
         }),
       });
 
@@ -113,7 +124,7 @@ export default function IteratePanel({
       setError('Pick at least one strategy or write custom instructions.');
       return;
     }
-    if (!originalPrompt.trim() && !initialImage) {
+    if (!originalPrompt.trim() && !hasRefs) {
       setError('Provide a reference image, an original prompt, or both.');
       return;
     }
@@ -132,8 +143,9 @@ export default function IteratePanel({
         body: JSON.stringify({
           projectId,
           originalPrompt,
-          referenceImageBase64: initialImage?.base64,
-          referenceMimeType: initialImage?.mimeType,
+          referenceImages: hasRefs
+            ? refs.map((r) => ({ base64: r.base64, mimeType: r.mimeType }))
+            : undefined,
           strategies: Array.from(strategies),
           otherInstructions,
           count: n,
@@ -245,7 +257,7 @@ export default function IteratePanel({
           onChange={(e) => setCount(e.target.value)}
         />
         <p className="text-text-muted text-[10px] mt-1">
-          Images render with Nano Banana 2{initialImage ? ' — your reference photo will be passed in for every iteration.' : '.'}
+          Images render with Nano Banana 2{hasRefs ? ` — your ${refs.length} reference photo${refs.length === 1 ? '' : 's'} will be passed in for every iteration.` : '.'}
         </p>
       </div>
 
@@ -326,7 +338,7 @@ export default function IteratePanel({
                             <PromptImageGenerator
                               key={`${promptText}-done`}
                               prompt={promptText}
-                              initialImage={initialImage}
+                              initialImages={refs}
                               initialModel={IMAGE_MODEL}
                               autoGenerateImageUrl={imgState.url}
                             />
@@ -335,7 +347,7 @@ export default function IteratePanel({
                             <PromptImageGenerator
                               key={`${promptText}-manual`}
                               prompt={promptText}
-                              initialImage={initialImage}
+                              initialImages={refs}
                               initialModel={IMAGE_MODEL}
                             />
                           )}

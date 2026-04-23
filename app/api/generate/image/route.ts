@@ -53,12 +53,15 @@ export async function POST(req: Request) {
       model = 'nano-banana',
       referenceImageBase64,
       referenceMimeType,
+      referenceImages,
       feedback,
     }: {
       prompt: string;
       model?: string;
       referenceImageBase64?: string;
       referenceMimeType?: string;
+      // New preferred shape: array of {base64, mimeType}.
+      referenceImages?: Array<{ base64: string; mimeType?: string }>;
       feedback?: string;
     } = body;
 
@@ -71,7 +74,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: `Unknown model: ${model}` }, { status: 400 });
     }
 
-    if (modelConfig.requiresRefImage && !referenceImageBase64) {
+    // Normalize: collect every reference image (new array shape + legacy single fields)
+    const refs: Array<{ base64: string; mimeType: string }> = [];
+    if (Array.isArray(referenceImages)) {
+      for (const r of referenceImages) {
+        if (r?.base64) refs.push({ base64: r.base64, mimeType: r.mimeType || 'image/jpeg' });
+      }
+    }
+    if (referenceImageBase64) {
+      refs.push({ base64: referenceImageBase64, mimeType: referenceMimeType || 'image/jpeg' });
+    }
+
+    if (modelConfig.requiresRefImage && refs.length === 0) {
       return NextResponse.json(
         { error: 'This model requires a reference image' },
         { status: 400 },
@@ -86,23 +100,24 @@ export async function POST(req: Request) {
     // Decide which endpoint to use:
     //   - If a reference image is provided AND the model has an /edit endpoint → use /edit
     //   - Otherwise → use the text-to-image endpoint
-    const hasRef = !!referenceImageBase64;
+    const hasRef = refs.length > 0;
     const endpointId = hasRef && modelConfig.editId ? modelConfig.editId : modelConfig.id;
     const isEditEndpoint = endpointId.endsWith('/edit') || endpointId.includes('/edit');
 
     // Build the input payload depending on whether we use the edit endpoint
     const input: Record<string, unknown> = { prompt: finalPrompt };
 
-    if (isEditEndpoint && referenceImageBase64) {
-      const dataUri = `data:${referenceMimeType || 'image/jpeg'};base64,${referenceImageBase64}`;
-      input.image_urls = [dataUri];
+    const dataUris = refs.map((r) => `data:${r.mimeType};base64,${r.base64}`);
+
+    if (isEditEndpoint && hasRef) {
+      // Nano-banana /edit endpoints accept multiple ref images via image_urls[]
+      input.image_urls = dataUris;
     } else if (hasRef && modelConfig.supportsRefImage && !isEditEndpoint) {
-      // Non-nano-banana models that accept a single image_url
-      const dataUri = `data:${referenceMimeType || 'image/jpeg'};base64,${referenceImageBase64}`;
-      input.image_url = dataUri;
+      // Non-nano-banana models that accept a single image_url — use the first one
+      input.image_url = dataUris[0];
     }
 
-    console.log('[generate/image] →', endpointId, { hasRef, model });
+    console.log('[generate/image] →', endpointId, { hasRef, refCount: refs.length, model });
 
     const result = await fal.subscribe(endpointId, {
       input,

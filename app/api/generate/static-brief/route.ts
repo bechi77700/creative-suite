@@ -33,7 +33,38 @@ function sse(event: string, data: unknown) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { projectId, product, count, mode, angle, additionalContext, imageBase64, imageMimeType } = body;
+    const {
+      projectId,
+      product,
+      count,
+      mode,
+      angle,
+      additionalContext,
+      imageBase64,
+      imageMimeType,
+      competitorImages,
+    } = body as {
+      projectId: string;
+      product: string;
+      count: number | string;
+      mode: 'clone' | 'scratch';
+      angle?: string;
+      additionalContext?: string;
+      imageBase64?: string;
+      imageMimeType?: string;
+      competitorImages?: Array<{ base64: string; mimeType?: string }>;
+    };
+
+    // Normalize competitor screenshots: new array shape + legacy single fields
+    const competitorRefs: Array<{ base64: string; mimeType: string }> = [];
+    if (Array.isArray(competitorImages)) {
+      for (const r of competitorImages) {
+        if (r?.base64) competitorRefs.push({ base64: r.base64, mimeType: r.mimeType || 'image/jpeg' });
+      }
+    }
+    if (imageBase64) {
+      competitorRefs.push({ base64: imageBase64, mimeType: imageMimeType || 'image/jpeg' });
+    }
 
     const [project, globalKnowledge] = await Promise.all([
       prisma.brandProject.findUnique({ where: { id: projectId }, include: { documents: true } }),
@@ -69,16 +100,20 @@ MANDATORY DIVERSITY RULES — batch of ${n} prompts:
     let visionContent: Anthropic.MessageParam['content'] | null = null;
 
     if (mode === 'clone') {
-      if (!imageBase64 || !imageMimeType) {
-        return new Response(JSON.stringify({ error: 'Image required for Clone & Adapt mode' }), {
+      if (competitorRefs.length === 0) {
+        return new Response(JSON.stringify({ error: 'At least one competitor ad screenshot is required for Clone & Adapt mode' }), {
           status: 400,
           headers: { 'Content-Type': 'application/json' },
         });
       }
 
+      const screenshotDescriptor = competitorRefs.length === 1
+        ? 'a competitor ad screenshot'
+        : `${competitorRefs.length} competitor ad screenshots`;
+
       promptText = `${GENERATION_RULES}
 
-You are the world's best creative strategist for Meta Ads. You have been given a competitor ad screenshot.
+You are the world's best creative strategist for Meta Ads. You have been given ${screenshotDescriptor}.${competitorRefs.length > 1 ? ' Audit each one separately, then synthesize the strongest patterns shared across them when generating prompts.' : ''}
 
 BRAND: ${project.name}
 PRODUCT: ${product}
@@ -97,7 +132,7 @@ ${diversityRule}
 ─────────────────────────────────────────────
 TASK
 ─────────────────────────────────────────────
-Step 1: Perform a DEEP AUDIT of the competitor ad in the image.
+Step 1: Perform a DEEP AUDIT of the competitor ad${competitorRefs.length > 1 ? 's (one audit per screenshot, then a short synthesis)' : ' in the image'}.
 Step 2: Generate ${n} Nanobanana prompt${n > 1 ? 's' : ''} that reproduce the winning FORMAT and STRUCTURE of that ad — but 100% adapted to the brand above.
 
 CORE RULE: The clone is about FORMAT only.
@@ -140,15 +175,15 @@ ${Array.from({ length: n }, (_, i) => `
 `).join('\n')}`;
 
       visionContent = [
-        {
-          type: 'image',
+        ...competitorRefs.map((r) => ({
+          type: 'image' as const,
           source: {
-            type: 'base64',
-            media_type: imageMimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-            data: imageBase64,
+            type: 'base64' as const,
+            media_type: r.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+            data: r.base64,
           },
-        },
-        { type: 'text', text: promptText },
+        })),
+        { type: 'text' as const, text: promptText },
       ];
     } else {
       const angleInstruction = angle?.trim()

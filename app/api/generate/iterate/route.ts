@@ -47,6 +47,7 @@ export async function POST(req: Request) {
       originalPrompt = '',
       referenceImageBase64,
       referenceMimeType,
+      referenceImages,
       strategies = [],
       otherInstructions = '',
       count,
@@ -55,13 +56,25 @@ export async function POST(req: Request) {
       originalPrompt?: string;
       referenceImageBase64?: string;
       referenceMimeType?: string;
+      referenceImages?: Array<{ base64: string; mimeType?: string }>;
       strategies?: string[];
       otherInstructions?: string;
       count?: number;
     } = body;
 
+    // Normalize all refs (new array shape + legacy single fields)
+    const refs: Array<{ base64: string; mimeType: string }> = [];
+    if (Array.isArray(referenceImages)) {
+      for (const r of referenceImages) {
+        if (r?.base64) refs.push({ base64: r.base64, mimeType: r.mimeType || 'image/jpeg' });
+      }
+    }
+    if (referenceImageBase64) {
+      refs.push({ base64: referenceImageBase64, mimeType: referenceMimeType || 'image/jpeg' });
+    }
+
     const hasPrompt = !!originalPrompt?.trim();
-    const hasImage = !!referenceImageBase64;
+    const hasImage = refs.length > 0;
     if (!hasPrompt && !hasImage) {
       return new Response(JSON.stringify({ error: 'Provide a reference image, an original prompt, or both.' }), {
         status: 400,
@@ -100,6 +113,7 @@ export async function POST(req: Request) {
       ? `\nADDITIONAL CUSTOM ITERATION INSTRUCTIONS FROM USER (apply these as the most important constraint):\n${otherInstructions.trim()}`
       : '';
 
+    const refImageDescriptor = refs.length === 1 ? 'a reference image' : `${refs.length} reference images`;
     const sourceBlock = hasPrompt && hasImage
       ? `─────────────────────────────────────────────
 ORIGINAL WINNING PROMPT (do NOT change its core DNA — only iterate along the chosen axes)
@@ -108,7 +122,7 @@ ORIGINAL WINNING PROMPT (do NOT change its core DNA — only iterate along the c
 ${originalPrompt.trim()}
 \`\`\`
 
-A reference image of the original winning creative is also attached above. Use BOTH the prompt and the image as the source of truth for what's already working.`
+${refImageDescriptor[0].toUpperCase() + refImageDescriptor.slice(1)} of the original winning creative ${refs.length === 1 ? 'is' : 'are'} also attached above. Use BOTH the prompt and the image${refs.length === 1 ? '' : 's'} as the source of truth for what's already working.`
       : hasPrompt
       ? `─────────────────────────────────────────────
 ORIGINAL WINNING PROMPT (do NOT change its core DNA — only iterate along the chosen axes)
@@ -117,9 +131,9 @@ ORIGINAL WINNING PROMPT (do NOT change its core DNA — only iterate along the c
 ${originalPrompt.trim()}
 \`\`\``
       : `─────────────────────────────────────────────
-ORIGINAL WINNING CREATIVE (image attached above — analyze it carefully)
+ORIGINAL WINNING CREATIVE (${refImageDescriptor} attached above — analyze ${refs.length === 1 ? 'it' : 'them'} carefully)
 ─────────────────────────────────────────────
-The user did NOT provide a written prompt. Look at the attached reference image and treat it as the winning creative. Identify its visual structure, headline, hook, layout, color treatment, and psychological angle. Each iteration must keep the winning DNA visible in this image.`;
+The user did NOT provide a written prompt. Look at the attached reference image${refs.length === 1 ? '' : 's'} and treat ${refs.length === 1 ? 'it' : 'them'} as the winning creative${refs.length === 1 ? '' : 's'}. Identify visual structure, headline, hook, layout, color treatment, and psychological angle. Each iteration must keep the winning DNA visible in ${refs.length === 1 ? 'this image' : 'these images'}.`;
 
     const promptText = `${GENERATION_RULES}
 
@@ -188,13 +202,13 @@ ${Array.from({ length: n }, (_, i) => `
             | { type: 'text'; text: string }
             | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
           > = [];
-          if (hasImage) {
+          for (const ref of refs) {
             userContent.push({
               type: 'image',
               source: {
                 type: 'base64',
-                media_type: (referenceMimeType as string) || 'image/jpeg',
-                data: referenceImageBase64 as string,
+                media_type: ref.mimeType,
+                data: ref.base64,
               },
             });
           }
@@ -223,7 +237,7 @@ ${Array.from({ length: n }, (_, i) => `
               module: 'iterate',
               inputs: JSON.stringify({
                 originalPrompt,
-                hasReferenceImage: hasImage,
+                referenceImageCount: refs.length,
                 strategies,
                 otherInstructions,
                 count: n,

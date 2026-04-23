@@ -5,6 +5,7 @@ import Sidebar from '@/components/Sidebar';
 import SaintGraalGate from '@/components/SaintGraalGate';
 import PromptImageGenerator, { IMAGE_MODELS } from '@/components/PromptImageGenerator';
 import IteratePanel from '@/components/IteratePanel';
+import MultiImageInput, { RefImage } from '@/components/MultiImageInput';
 import ReactMarkdown from 'react-markdown';
 
 type Mode = 'clone' | 'scratch';
@@ -73,20 +74,16 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
   const [product, setProduct] = useState('');
   const [count, setCount] = useState('3');
 
-  // Mode A inputs (Clone)
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState('');
+  // Mode A inputs (Clone) — multi competitor screenshots
+  const [competitorImages, setCompetitorImages] = useState<RefImage[]>([]);
   const [modeAContext, setModeAContext] = useState('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Mode B inputs (From Scratch)
   const [angle, setAngle] = useState('');
   const [modeBContext, setModeBContext] = useState('');
 
-  // Product reference image (used for image generation, both modes)
-  const [productRefFile, setProductRefFile] = useState<File | null>(null);
-  const [productRefPreview, setProductRefPreview] = useState('');
-  const productRefInputRef = useRef<HTMLInputElement>(null);
+  // Product reference image(s) (used for image generation, both modes)
+  const [productRefImages, setProductRefImages] = useState<RefImage[]>([]);
 
   // Image model
   const [imageModel, setImageModel] = useState('nano-banana-2');
@@ -117,47 +114,14 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
     });
   }, [id]);
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImageFile(file);
-    const reader = new FileReader();
-    reader.onload = (ev) => setImagePreview(ev.target?.result as string);
-    reader.readAsDataURL(file);
-  };
-
-  const removeImage = () => {
-    setImageFile(null);
-    setImagePreview('');
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const handleProductRefChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setProductRefFile(file);
-    const reader = new FileReader();
-    reader.onload = (ev) => setProductRefPreview(ev.target?.result as string);
-    reader.readAsDataURL(file);
-  };
-
-  const removeProductRef = () => {
-    setProductRefFile(null);
-    setProductRefPreview('');
-    if (productRefInputRef.current) productRefInputRef.current.value = '';
-  };
-
   // Fire image generation for a single prompt (called as prompts complete during streaming)
   const fireImageGen = async (promptText: string) => {
     setImageStates((prev) => ({ ...prev, [promptText]: { status: 'generating' } }));
 
-    let referenceImageBase64: string | undefined;
-    let referenceMimeType: string | undefined;
+    let referenceImages: Array<{ base64: string; mimeType: string }> | undefined;
     const currentImageModelConfig = IMAGE_MODELS.find((m) => m.value === imageModel);
-    if (currentImageModelConfig?.allowsRef && productRefFile && productRefPreview) {
-      const comma = productRefPreview.indexOf(',');
-      referenceImageBase64 = productRefPreview.slice(comma + 1);
-      referenceMimeType = productRefFile.type;
+    if (currentImageModelConfig?.allowsRef && productRefImages.length > 0) {
+      referenceImages = productRefImages.map((r) => ({ base64: r.base64, mimeType: r.mimeType }));
     }
 
     try {
@@ -167,8 +131,7 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
         body: JSON.stringify({
           prompt: promptText,
           model: imageModel,
-          referenceImageBase64,
-          referenceMimeType,
+          referenceImages,
         }),
       });
 
@@ -196,7 +159,7 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
 
   const handleGenerate = async (withImages: boolean) => {
     if (!product.trim()) return;
-    if (mode === 'clone' && !imageFile) return;
+    if (mode === 'clone' && competitorImages.length === 0) return;
     const n = Math.max(1, parseInt(count) || 1);
 
     // Reset
@@ -210,14 +173,10 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
     setAutoImagesEnabled(withImages);
     currentModeRef.current = mode;
 
-    // Extract base64 from the dataURL already stored in imagePreview — for clone mode
-    let competitorBase64 = '';
-    let competitorMimeType = '';
-    if (mode === 'clone' && imagePreview) {
-      const comma = imagePreview.indexOf(',');
-      competitorBase64 = imagePreview.slice(comma + 1);
-      competitorMimeType = imageFile!.type;
-    }
+    // Build the array of competitor screenshots for clone mode
+    const competitorRefs = mode === 'clone'
+      ? competitorImages.map((r) => ({ base64: r.base64, mimeType: r.mimeType }))
+      : [];
 
     try {
       const res = await fetch('/api/generate/static-brief', {
@@ -230,8 +189,7 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
           mode,
           angle: mode === 'scratch' ? angle : '',
           additionalContext: mode === 'clone' ? modeAContext : modeBContext,
-          imageBase64: competitorBase64,
-          imageMimeType: competitorMimeType,
+          competitorImages: competitorRefs,
         }),
       });
 
@@ -301,19 +259,10 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
   };
 
   const n = Math.max(1, parseInt(count) || 1);
-  const canGenerate = product.trim() && (mode === 'scratch' || imageFile);
+  const canGenerate = product.trim() && (mode === 'scratch' || competitorImages.length > 0);
 
-  // Build initialImage payload for PromptImageGenerator (so user doesn't re-upload in each block)
-  const initialImageForChild = productRefFile && productRefPreview
-    ? (() => {
-        const comma = productRefPreview.indexOf(',');
-        return {
-          base64: productRefPreview.slice(comma + 1),
-          mimeType: productRefFile.type,
-          previewDataUri: productRefPreview,
-        };
-      })()
-    : undefined;
+  // Pre-loaded product reference images forwarded to each PromptImageGenerator child
+  const initialImagesForChild = productRefImages;
 
   return (
     <div className="flex h-screen bg-bg-base overflow-hidden">
@@ -364,35 +313,13 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
             {mode === 'clone' && (
               <>
                 <div>
-                  <label className="text-text-muted text-xs mb-2 block">Competitor Ad Screenshot *</label>
-                  {imagePreview ? (
-                    <div className="relative">
-                      <img
-                        src={imagePreview}
-                        alt="ref"
-                        className="w-full rounded-md border border-bg-border object-cover max-h-52"
-                      />
-                      <button
-                        onClick={removeImage}
-                        className="absolute top-1.5 right-1.5 bg-bg-base/90 text-text-muted text-xs px-2 py-0.5 rounded hover:text-accent-red transition-colors"
-                      >
-                        ✕ Remove
-                      </button>
-                    </div>
-                  ) : (
-                    <label className="flex flex-col items-center justify-center h-32 border border-dashed border-bg-border rounded-md cursor-pointer hover:border-accent-gold/50 transition-colors group">
-                      <span className="text-text-muted text-3xl mb-1 group-hover:text-accent-gold transition-colors">↑</span>
-                      <span className="text-text-muted text-xs group-hover:text-text-secondary transition-colors">Upload competitor ad</span>
-                      <span className="text-text-muted text-[10px] mt-0.5">JPG · PNG · WEBP</span>
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        className="hidden"
-                        accept="image/jpeg,image/png,image/webp,image/gif"
-                        onChange={handleImageChange}
-                      />
-                    </label>
-                  )}
+                  <label className="text-text-muted text-xs mb-2 block">Competitor Ad Screenshot(s) *</label>
+                  <MultiImageInput
+                    images={competitorImages}
+                    onChange={setCompetitorImages}
+                    max={6}
+                    emptyLabel="↑ Upload competitor ad screenshot(s)"
+                  />
                 </div>
 
                 <div>
@@ -495,36 +422,15 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
                 <p className="text-text-secondary text-xs uppercase tracking-widest mb-3">Image generation</p>
 
                 <label className="text-text-muted text-xs mb-1.5 block">
-                  Product reference image
+                  Product reference photo(s)
                   <span className="text-text-muted ml-1 font-normal opacity-60">— optional, used for all images</span>
                 </label>
-                {productRefPreview ? (
-                  <div className="relative">
-                    <img
-                      src={productRefPreview}
-                      alt="product ref"
-                      className="w-full rounded-md border border-bg-border object-cover max-h-32"
-                    />
-                    <button
-                      onClick={removeProductRef}
-                      className="absolute top-1.5 right-1.5 bg-bg-base/90 text-text-muted text-xs px-2 py-0.5 rounded hover:text-accent-red transition-colors"
-                    >
-                      ✕ Remove
-                    </button>
-                  </div>
-                ) : (
-                  <label className="flex flex-col items-center justify-center h-24 border border-dashed border-bg-border rounded-md cursor-pointer hover:border-accent-gold/50 transition-colors group">
-                    <span className="text-text-muted text-xs group-hover:text-text-secondary transition-colors">↑ Upload product photo</span>
-                    <span className="text-text-muted text-[10px] mt-0.5">JPG · PNG · WEBP</span>
-                    <input
-                      ref={productRefInputRef}
-                      type="file"
-                      className="hidden"
-                      accept="image/jpeg,image/png,image/webp"
-                      onChange={handleProductRefChange}
-                    />
-                  </label>
-                )}
+                <MultiImageInput
+                  images={productRefImages}
+                  onChange={setProductRefImages}
+                  max={6}
+                  emptyLabel="↑ Upload product photo(s)"
+                />
               </div>
 
               <div>
@@ -562,7 +468,7 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
                 ? `Generating ${n} prompt${n !== 1 ? 's' : ''}…`
                 : `Generate prompts only`}
             </button>
-            {mode === 'clone' && !imageFile && (
+            {mode === 'clone' && competitorImages.length === 0 && (
               <p className="text-accent-red/60 text-[10px] text-center">
                 Upload a competitor ad to use Clone mode
               </p>
@@ -677,7 +583,7 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
                                   <IteratePanel
                                     projectId={id}
                                     originalPrompt={promptText}
-                                    initialImage={initialImageForChild}
+                                    initialImages={initialImagesForChild}
                                     onClose={() => setIteratingPromptText(null)}
                                   />
                                 )}
@@ -695,7 +601,7 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
                                     <p className="text-text-secondary text-xs mt-0.5">{imgState.error}</p>
                                     <PromptImageGenerator
                                       prompt={promptText}
-                                      initialImage={initialImageForChild}
+                                      initialImages={initialImagesForChild}
                                       initialModel={imageModel}
                                     />
                                   </div>
@@ -704,7 +610,7 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
                                   <PromptImageGenerator
                                     key={`${promptText}-done`}
                                     prompt={promptText}
-                                    initialImage={initialImageForChild}
+                                    initialImages={initialImagesForChild}
                                     initialModel={imageModel}
                                     autoGenerateImageUrl={imgState.url}
                                   />
@@ -713,7 +619,7 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
                                   <PromptImageGenerator
                                     key={`${promptText}-manual`}
                                     prompt={promptText}
-                                    initialImage={initialImageForChild}
+                                    initialImages={initialImagesForChild}
                                     initialModel={imageModel}
                                   />
                                 )}

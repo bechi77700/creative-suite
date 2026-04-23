@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Sidebar from '@/components/Sidebar';
 import IteratePanel from '@/components/IteratePanel';
 import VideoIteratePanel from '@/components/VideoIteratePanel';
+import MultiImageInput, { RefImage } from '@/components/MultiImageInput';
 
 type Tab = 'photo' | 'video';
 
@@ -35,9 +36,7 @@ export default function IteratePage({ params }: { params: { id: string } }) {
   // ── Photo state ───────────────────────────
   const [photoSelectedPrompt, setPhotoSelectedPrompt] = useState('');
   const [photoPastedPrompt, setPhotoPastedPrompt] = useState('');
-  const [photoRefFile, setPhotoRefFile] = useState<File | null>(null);
-  const [photoRefPreview, setPhotoRefPreview] = useState('');
-  const photoRefInputRef = useRef<HTMLInputElement>(null);
+  const [photoRefImages, setPhotoRefImages] = useState<RefImage[]>([]);
 
   // ── Video state ───────────────────────────
   const [videoSelectedScript, setVideoSelectedScript] = useState('');
@@ -54,34 +53,8 @@ export default function IteratePage({ params }: { params: { id: string } }) {
       .catch(() => setHistory([]));
   }, [id]);
 
-  const handlePhotoRefChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setPhotoRefFile(file);
-    const reader = new FileReader();
-    reader.onload = (ev) => setPhotoRefPreview(ev.target?.result as string);
-    reader.readAsDataURL(file);
-  };
-
-  const removePhotoRef = () => {
-    setPhotoRefFile(null);
-    setPhotoRefPreview('');
-    if (photoRefInputRef.current) photoRefInputRef.current.value = '';
-  };
-
-  const photoInitialImage = photoRefFile && photoRefPreview
-    ? (() => {
-        const comma = photoRefPreview.indexOf(',');
-        return {
-          base64: photoRefPreview.slice(comma + 1),
-          mimeType: photoRefFile.type,
-          previewDataUri: photoRefPreview,
-        };
-      })()
-    : undefined;
-
   const photoActivePrompt = (photoSelectedPrompt || photoPastedPrompt).trim();
-  const photoCanIterate = !!photoActivePrompt || !!photoInitialImage;
+  const photoCanIterate = !!photoActivePrompt || photoRefImages.length > 0;
 
   const videoActiveScript = (videoSelectedScript || videoPastedScript).trim();
 
@@ -180,34 +153,14 @@ export default function IteratePage({ params }: { params: { id: string } }) {
 
                 <div>
                   <label className="text-text-muted text-[10px] uppercase tracking-widest block mb-1">
-                    Reference photo <span className="normal-case">(optional if you have a prompt — passed straight into Nano Banana 2 for every iteration)</span>
+                    Reference photo(s) <span className="normal-case">(optional if you have a prompt — passed straight into Nano Banana 2 for every iteration; multiple allowed)</span>
                   </label>
-                  {photoRefPreview ? (
-                    <div className="relative inline-block">
-                      <img
-                        src={photoRefPreview}
-                        alt="reference"
-                        className="h-32 rounded-md border border-bg-border"
-                      />
-                      <button
-                        onClick={removePhotoRef}
-                        className="absolute top-1 right-1 bg-bg-base/90 text-text-muted text-[10px] px-1.5 py-0.5 rounded hover:text-accent-red"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ) : (
-                    <label className="flex items-center justify-center h-24 border border-dashed border-bg-border rounded-md cursor-pointer hover:border-accent-gold/50 transition-colors">
-                      <span className="text-text-muted text-xs">↑ Upload reference photo</span>
-                      <input
-                        ref={photoRefInputRef}
-                        type="file"
-                        className="hidden"
-                        accept="image/jpeg,image/png,image/webp"
-                        onChange={handlePhotoRefChange}
-                      />
-                    </label>
-                  )}
+                  <MultiImageInput
+                    images={photoRefImages}
+                    onChange={setPhotoRefImages}
+                    max={6}
+                    emptyLabel="↑ Upload reference photo(s)"
+                  />
                 </div>
 
                 {!photoCanIterate && (
@@ -221,10 +174,10 @@ export default function IteratePage({ params }: { params: { id: string } }) {
                 <div>
                   <p className="text-text-secondary text-xs uppercase tracking-widest mb-2">2 · Configure iterations</p>
                   <IteratePanel
-                    key={`${photoActivePrompt}-${photoInitialImage?.base64?.slice(0, 12) || 'no-img'}`}
+                    key={`${photoActivePrompt}-${photoRefImages.map((r) => r.base64.slice(0, 8)).join('|') || 'no-img'}`}
                     projectId={id}
                     originalPrompt={photoActivePrompt}
-                    initialImage={photoInitialImage}
+                    initialImages={photoRefImages}
                     hideClose
                   />
                 </div>
