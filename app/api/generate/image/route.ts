@@ -12,6 +12,8 @@ if (FAL_KEY) {
 const MODEL_MAP: Record<string, { id: string; supportsRefImage: boolean; requiresRefImage: boolean }> = {
   'nano-banana': { id: 'fal-ai/nano-banana', supportsRefImage: false, requiresRefImage: false },
   'nano-banana-edit': { id: 'fal-ai/nano-banana/edit', supportsRefImage: true, requiresRefImage: true },
+  'nano-banana-2': { id: 'fal-ai/nano-banana-2', supportsRefImage: true, requiresRefImage: false },
+  'nano-banana-pro': { id: 'fal-ai/nano-banana-pro', supportsRefImage: true, requiresRefImage: false },
   'flux-pro-ultra': { id: 'fal-ai/flux-pro/v1.1-ultra', supportsRefImage: false, requiresRefImage: false },
   'recraft-v3': { id: 'fal-ai/recraft-v3', supportsRefImage: false, requiresRefImage: false },
   'imagen4': { id: 'fal-ai/imagen4/preview', supportsRefImage: false, requiresRefImage: false },
@@ -64,8 +66,8 @@ export async function POST(req: Request) {
 
     if (modelConfig.supportsRefImage && referenceImageBase64) {
       const dataUri = `data:${referenceMimeType || 'image/jpeg'};base64,${referenceImageBase64}`;
-      // nano-banana/edit uses image_urls (array)
-      if (model === 'nano-banana-edit') {
+      // Most nano-banana variants use image_urls (array of inputs); other models use image_url
+      if (model.startsWith('nano-banana')) {
         input.image_urls = [dataUri];
       } else {
         input.image_url = dataUri;

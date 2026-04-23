@@ -1,7 +1,8 @@
-import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL, GENERATION_RULES } from '@/lib/anthropic';
+
+export const maxDuration = 300;
 
 const NANOBANANA_FORMAT = `NANOBANANA PROMPT FORMAT — use exactly this structure for every prompt:
 [Subject / Action]
@@ -24,25 +25,38 @@ function buildKnowledgeContext(globalKnowledge: { category: string; name: string
   ].join('\n');
 }
 
+// Helper to send an SSE event
+function sse(event: string, data: unknown) {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
 export async function POST(req: Request) {
   try {
-  const body = await req.json();
-  const { projectId, product, count, mode, angle, additionalContext, imageBase64, imageMimeType } = body;
+    const body = await req.json();
+    const { projectId, product, count, mode, angle, additionalContext, imageBase64, imageMimeType } = body;
 
-  const [project, globalKnowledge] = await Promise.all([
-    prisma.brandProject.findUnique({ where: { id: projectId }, include: { documents: true } }),
-    prisma.globalKnowledge.findMany(),
-  ]);
-  if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
-  if (!project.documents.some((d) => d.type === 'saint_graal_doc')) {
-    return NextResponse.json({ error: 'Saint Graal document required before generating.' }, { status: 403 });
-  }
+    const [project, globalKnowledge] = await Promise.all([
+      prisma.brandProject.findUnique({ where: { id: projectId }, include: { documents: true } }),
+      prisma.globalKnowledge.findMany(),
+    ]);
+    if (!project) {
+      return new Response(JSON.stringify({ error: 'Project not found' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (!project.documents.some((d) => d.type === 'saint_graal_doc')) {
+      return new Response(
+        JSON.stringify({ error: 'Saint Graal document required before generating.' }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
 
-  const brandContext = project.documents.map((d) => `[${d.type.toUpperCase()} — ${d.name}]`).join('\n');
-  const knowledgeContext = buildKnowledgeContext(globalKnowledge);
-  const n = Math.max(1, parseInt(count) || 1);
+    const brandContext = project.documents.map((d) => `[${d.type.toUpperCase()} — ${d.name}]`).join('\n');
+    const knowledgeContext = buildKnowledgeContext(globalKnowledge);
+    const n = Math.max(1, parseInt(count) || 1);
 
-  const diversityRule = n > 1 ? `
+    const diversityRule = n > 1 ? `
 MANDATORY DIVERSITY RULES — batch of ${n} prompts:
 - Every prompt MUST use a completely different visual format and composition
 - Vary freely: dark vs light, text-heavy vs image-hero, split vs full-bleed, minimal vs layered
@@ -50,17 +64,19 @@ MANDATORY DIVERSITY RULES — batch of ${n} prompts:
 - Never repeat the same composition structure in the same batch
 - If angle is the same across all, the FORMAT must make each one feel like a different ad` : '';
 
-  let output: string;
+    // ── Build the prompt for the chosen mode ──
+    let promptText: string;
+    let visionContent: Anthropic.MessageParam['content'] | null = null;
 
-  // ──────────────────────────────────────────────
-  // MODE A — CLONE & ADAPT
-  // ──────────────────────────────────────────────
-  if (mode === 'clone') {
-    if (!imageBase64 || !imageMimeType) {
-      return NextResponse.json({ error: 'Image required for Clone & Adapt mode' }, { status: 400 });
-    }
+    if (mode === 'clone') {
+      if (!imageBase64 || !imageMimeType) {
+        return new Response(JSON.stringify({ error: 'Image required for Clone & Adapt mode' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
 
-    const promptText = `${GENERATION_RULES}
+      promptText = `${GENERATION_RULES}
 
 You are the world's best creative strategist for Meta Ads. You have been given a competitor ad screenshot.
 
@@ -122,35 +138,23 @@ ${Array.from({ length: n }, (_, i) => `
 **Rationale:** [one sentence — what from the competitor structure this preserves and why]
 `).join('\n')}`;
 
-    const visionContent: Anthropic.MessageParam['content'] = [
-      {
-        type: 'image',
-        source: {
-          type: 'base64',
-          media_type: imageMimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-          data: imageBase64,
+      visionContent = [
+        {
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: imageMimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+            data: imageBase64,
+          },
         },
-      },
-      { type: 'text', text: promptText },
-    ];
+        { type: 'text', text: promptText },
+      ];
+    } else {
+      const angleInstruction = angle?.trim()
+        ? `MARKETING ANGLE: "${angle}" — all ${n} prompts must be on this angle, each with a completely different visual format.`
+        : `MARKETING ANGLE: Not specified — you choose the most powerful angle(s) based on the brand knowledge and product. If generating multiple prompts, you may vary angles to find the strongest.`;
 
-    const response = await getAnthropic().messages.create({
-      model: MODEL,
-      max_tokens: 4000 + n * 500,
-      messages: [{ role: 'user', content: visionContent }],
-    });
-
-    output = (response.content[0] as { type: string; text: string }).text;
-
-  // ──────────────────────────────────────────────
-  // MODE B — FROM SCRATCH
-  // ──────────────────────────────────────────────
-  } else {
-    const angleInstruction = angle?.trim()
-      ? `MARKETING ANGLE: "${angle}" — all ${n} prompts must be on this angle, each with a completely different visual format.`
-      : `MARKETING ANGLE: Not specified — you choose the most powerful angle(s) based on the brand knowledge and product. If generating multiple prompts, you may vary angles to find the strongest.`;
-
-    const scratchPrompt = `${GENERATION_RULES}
+      promptText = `${GENERATION_RULES}
 
 You are the world's best creative strategist for Meta Ads cold traffic on the US market.
 
@@ -199,29 +203,73 @@ ${Array.from({ length: n }, (_, i) => `
 
 **Rationale:** [one sentence — why this format for this angle and this market]
 `).join('\n')}`;
+    }
 
-    const response = await getAnthropic().messages.create({
-      model: MODEL,
-      max_tokens: 2500 + n * 500,
-      messages: [{ role: 'user', content: scratchPrompt }],
+    const messages: Anthropic.MessageParam[] = visionContent
+      ? [{ role: 'user', content: visionContent }]
+      : [{ role: 'user', content: promptText }];
+
+    const maxTokens = mode === 'clone' ? 4000 + n * 500 : 2500 + n * 500;
+    const anthropic = getAnthropic();
+
+    // Build the SSE stream
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        let fullText = '';
+        try {
+          const messageStream = anthropic.messages.stream({
+            model: MODEL,
+            max_tokens: maxTokens,
+            messages,
+          });
+
+          for await (const chunk of messageStream) {
+            if (
+              chunk.type === 'content_block_delta' &&
+              chunk.delta.type === 'text_delta'
+            ) {
+              const text = chunk.delta.text;
+              fullText += text;
+              controller.enqueue(encoder.encode(sse('text', { text })));
+            }
+          }
+
+          // Save full output to DB after stream completes
+          const generation = await prisma.generation.create({
+            data: {
+              projectId,
+              module: 'static',
+              inputs: JSON.stringify({ product, count: n, mode, angle: angle || null, additionalContext }),
+              output: fullText,
+            },
+          });
+
+          controller.enqueue(encoder.encode(sse('done', { generationId: generation.id })));
+          controller.close();
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error('[static-brief stream] ERROR:', message);
+          controller.enqueue(encoder.encode(sse('error', { error: message })));
+          controller.close();
+        }
+      },
     });
 
-    output = (response.content[0] as { type: string; text: string }).text;
-  }
-
-  const generation = await prisma.generation.create({
-    data: {
-      projectId,
-      module: 'static',
-      inputs: JSON.stringify({ product, count: n, mode, angle: angle || null, additionalContext }),
-      output,
-    },
-  });
-
-  return NextResponse.json({ output, generationId: generation.id });
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      },
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[static-brief] ERROR:', message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 }
