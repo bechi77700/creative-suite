@@ -4,5 +4,6 @@ buildCommand = "npm run build"
 
 [deploy]
 startCommand = "npm start"
+preDeployCommand = "npx prisma db push"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
