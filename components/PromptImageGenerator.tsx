@@ -1,0 +1,223 @@
+'use client';
+
+import { useRef, useState } from 'react';
+
+const MODELS = [
+  { value: 'nano-banana', label: 'Nano Banana (text → image, fast & cheap)', needsRef: false, allowsRef: false },
+  { value: 'nano-banana-edit', label: 'Nano Banana Pro (uses your reference image)', needsRef: true, allowsRef: true },
+  { value: 'flux-pro-ultra', label: 'Flux Pro Ultra (highest realism, no ref)', needsRef: false, allowsRef: false },
+  { value: 'recraft-v3', label: 'Recraft v3 (best for ads with text)', needsRef: false, allowsRef: false },
+  { value: 'imagen4', label: 'Imagen 4 (Google, photoreal)', needsRef: false, allowsRef: false },
+];
+
+export default function PromptImageGenerator({ prompt }: { prompt: string }) {
+  const [model, setModel] = useState('nano-banana');
+  const [refFile, setRefFile] = useState<File | null>(null);
+  const [refPreview, setRefPreview] = useState('');
+  const [feedback, setFeedback] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [imageUrl, setImageUrl] = useState('');
+  const [error, setError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const currentModel = MODELS.find((m) => m.value === model)!;
+
+  const handleRefChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setRefFile(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => setRefPreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const removeRef = () => {
+    setRefFile(null);
+    setRefPreview('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const generate = async (withFeedback = false) => {
+    if (currentModel.needsRef && !refFile) {
+      setError('This model requires a reference image — please upload one above.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    let referenceImageBase64 = '';
+    let referenceMimeType = '';
+    if (refFile && refPreview && currentModel.allowsRef) {
+      const comma = refPreview.indexOf(',');
+      referenceImageBase64 = refPreview.slice(comma + 1);
+      referenceMimeType = refFile.type;
+    }
+
+    try {
+      const res = await fetch('/api/generate/image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt,
+          model,
+          referenceImageBase64: referenceImageBase64 || undefined,
+          referenceMimeType: referenceMimeType || undefined,
+          feedback: withFeedback ? feedback : undefined,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `Server error ${res.status}` }));
+        setError(err.error || `Error ${res.status}`);
+        setLoading(false);
+        return;
+      }
+
+      const data = await res.json();
+      setImageUrl(data.imageUrl);
+      if (withFeedback) setFeedback('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unexpected error');
+    }
+
+    setLoading(false);
+  };
+
+  const downloadImage = async () => {
+    if (!imageUrl) return;
+    try {
+      const res = await fetch(imageUrl);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `generated-${Date.now()}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // fallback: open in new tab
+      window.open(imageUrl, '_blank');
+    }
+  };
+
+  return (
+    <div className="border border-bg-border rounded-lg p-4 mt-3 bg-bg-base/50 space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-text-secondary text-xs uppercase tracking-widest">Generate image with AI</span>
+      </div>
+
+      {/* Model selector */}
+      <div>
+        <label className="text-text-muted text-[10px] uppercase tracking-widest block mb-1">Model</label>
+        <select
+          className="input-field text-xs"
+          value={model}
+          onChange={(e) => {
+            setModel(e.target.value);
+            setImageUrl('');
+            setError('');
+          }}
+        >
+          {MODELS.map((m) => (
+            <option key={m.value} value={m.value}>{m.label}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Reference image (only if model supports it) */}
+      {currentModel.allowsRef && (
+        <div>
+          <label className="text-text-muted text-[10px] uppercase tracking-widest block mb-1">
+            Product reference image {currentModel.needsRef ? '*' : '(optional)'}
+          </label>
+          {refPreview ? (
+            <div className="relative inline-block">
+              <img src={refPreview} alt="ref" className="h-24 rounded-md border border-bg-border" />
+              <button
+                onClick={removeRef}
+                className="absolute top-1 right-1 bg-bg-base/90 text-text-muted text-[10px] px-1.5 py-0.5 rounded hover:text-accent-red"
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <label className="flex items-center justify-center h-20 border border-dashed border-bg-border rounded-md cursor-pointer hover:border-accent-gold/50 transition-colors">
+              <span className="text-text-muted text-xs">↑ Upload product photo</span>
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handleRefChange}
+              />
+            </label>
+          )}
+        </div>
+      )}
+
+      {/* Generate button (only if no image yet) */}
+      {!imageUrl && !loading && (
+        <button
+          onClick={() => generate(false)}
+          className="btn-primary w-full text-xs"
+          disabled={loading || (currentModel.needsRef && !refFile)}
+        >
+          Generate image
+        </button>
+      )}
+
+      {/* Loading */}
+      {loading && (
+        <div className="flex items-center justify-center py-8">
+          <div className="w-6 h-6 border-2 border-accent-gold/30 border-t-accent-gold rounded-full animate-spin" />
+          <span className="text-text-muted text-xs ml-3">Generating image…</span>
+        </div>
+      )}
+
+      {/* Error */}
+      {error && !loading && (
+        <div className="border border-accent-red/40 bg-accent-red/5 rounded px-3 py-2 text-xs text-accent-red">
+          {error}
+        </div>
+      )}
+
+      {/* Generated image + feedback/regenerate */}
+      {imageUrl && !loading && (
+        <div className="space-y-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={imageUrl} alt="generated" className="w-full rounded-md border border-bg-border" />
+
+          <div className="flex gap-2">
+            <button onClick={downloadImage} className="btn-secondary text-xs flex-1">
+              Download
+            </button>
+            <button
+              onClick={() => { setImageUrl(''); setError(''); }}
+              className="btn-secondary text-xs flex-1"
+            >
+              Reset
+            </button>
+          </div>
+
+          <div>
+            <label className="text-text-muted text-[10px] uppercase tracking-widest block mb-1">
+              What's wrong? (optional — improves regeneration)
+            </label>
+            <textarea
+              className="input-field resize-none text-xs"
+              rows={2}
+              placeholder="e.g. text is unreadable, wrong product color, too dark…"
+              value={feedback}
+              onChange={(e) => setFeedback(e.target.value)}
+            />
+          </div>
+
+          <button onClick={() => generate(true)} className="btn-primary w-full text-xs">
+            Regenerate {feedback.trim() ? 'with feedback' : ''}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

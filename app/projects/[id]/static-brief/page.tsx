@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Sidebar from '@/components/Sidebar';
 import SaintGraalGate from '@/components/SaintGraalGate';
+import PromptImageGenerator from '@/components/PromptImageGenerator';
 import ReactMarkdown from 'react-markdown';
 
 type Mode = 'clone' | 'scratch';
@@ -405,17 +406,21 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
                       code({ children, className }) {
                         const isBlock = className || String(children).includes('\n');
                         if (isBlock) {
+                          const promptText = String(children).trim();
                           return (
-                            <div className="relative my-3 group">
-                              <pre className="bg-bg-base border border-accent-gold/25 rounded-lg p-5 text-xs text-text-primary font-mono leading-relaxed overflow-x-auto whitespace-pre-wrap">
-                                {children}
-                              </pre>
-                              <button
-                                onClick={() => copyText(String(children))}
-                                className="absolute top-2.5 right-2.5 btn-secondary text-xs px-2.5 py-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                              >
-                                Copy
-                              </button>
+                            <div className="my-3">
+                              <div className="relative group">
+                                <pre className="bg-bg-base border border-accent-gold/25 rounded-lg p-5 text-xs text-text-primary font-mono leading-relaxed overflow-x-auto whitespace-pre-wrap">
+                                  {children}
+                                </pre>
+                                <button
+                                  onClick={() => copyText(promptText)}
+                                  className="absolute top-2.5 right-2.5 btn-secondary text-xs px-2.5 py-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                  Copy
+                                </button>
+                              </div>
+                              <PromptImageGenerator prompt={promptText} />
                             </div>
                           );
                         }
