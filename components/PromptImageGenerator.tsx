@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export const IMAGE_MODELS = [
   { value: 'nano-banana-pro', label: 'Nano Banana Pro (best — uses ref image if provided)', needsRef: false, allowsRef: true },
@@ -29,7 +29,24 @@ export default function PromptImageGenerator({ prompt, initialImage, initialMode
   const [loading, setLoading] = useState(false);
   const [imageUrl, setImageUrl] = useState(autoGenerateImageUrl || '');
   const [error, setError] = useState('');
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Close fullscreen on Escape
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsFullscreen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    // Lock body scroll while modal open
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [isFullscreen]);
 
   const currentModel = IMAGE_MODELS.find((m) => m.value === model)!;
 
@@ -206,7 +223,9 @@ export default function PromptImageGenerator({ prompt, initialImage, initialMode
           <img
             src={imageUrl}
             alt="generated"
-            className="max-w-xs max-h-80 w-auto h-auto rounded-md border border-bg-border mx-auto block"
+            onClick={() => setIsFullscreen(true)}
+            className="max-w-xs max-h-80 w-auto h-auto rounded-md border border-bg-border mx-auto block cursor-zoom-in hover:opacity-90 transition-opacity"
+            title="Click to view full size"
           />
 
           <div className="flex gap-2">
@@ -236,6 +255,29 @@ export default function PromptImageGenerator({ prompt, initialImage, initialMode
 
           <button onClick={() => generate(true)} className="btn-primary w-full text-xs">
             Regenerate {feedback.trim() ? 'with feedback' : ''}
+          </button>
+        </div>
+      )}
+
+      {/* Fullscreen lightbox */}
+      {isFullscreen && imageUrl && (
+        <div
+          onClick={() => setIsFullscreen(false)}
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-6 cursor-zoom-out"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={imageUrl}
+            alt="generated full size"
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-full max-h-full object-contain rounded-md cursor-default"
+          />
+          <button
+            onClick={() => setIsFullscreen(false)}
+            className="absolute top-4 right-4 text-white/80 hover:text-white text-2xl w-10 h-10 flex items-center justify-center rounded-full bg-black/50 hover:bg-black/70 transition-colors"
+            title="Close (Esc)"
+          >
+            ✕
           </button>
         </div>
       )}
