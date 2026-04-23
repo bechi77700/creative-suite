@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Sidebar from '@/components/Sidebar';
 import SaintGraalGate from '@/components/SaintGraalGate';
 import PromptImageGenerator, { IMAGE_MODELS } from '@/components/PromptImageGenerator';
+import IteratePanel from '@/components/IteratePanel';
 import ReactMarkdown from 'react-markdown';
 
 type Mode = 'clone' | 'scratch';
@@ -100,6 +101,9 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
   // Per-prompt image states (keyed by promptText)
   const [imageStates, setImageStates] = useState<Record<string, ImageState>>({});
   const [autoImagesEnabled, setAutoImagesEnabled] = useState(false);
+
+  // Track which prompt has its iterate panel open
+  const [iteratingPromptText, setIteratingPromptText] = useState<string | null>(null);
 
   // Track which prompts we've already kicked off image gen for (avoid duplicates during streaming)
   const firedImagePromptsRef = useRef<Set<string>>(new Set());
@@ -645,13 +649,39 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
                                   <pre className="bg-bg-base border border-accent-gold/25 rounded-lg p-5 text-xs text-text-primary font-mono leading-relaxed overflow-x-auto whitespace-pre-wrap">
                                     {children}
                                   </pre>
-                                  <button
-                                    onClick={() => copyText(promptText)}
-                                    className="absolute top-2.5 right-2.5 btn-secondary text-xs px-2.5 py-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                                  >
-                                    Copy
-                                  </button>
+                                  <div className="absolute top-2.5 right-2.5 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button
+                                      onClick={() =>
+                                        setIteratingPromptText(
+                                          iteratingPromptText === promptText ? null : promptText,
+                                        )
+                                      }
+                                      className={`text-xs px-2.5 py-1 rounded border transition-colors ${
+                                        iteratingPromptText === promptText
+                                          ? 'bg-accent-gold/20 border-accent-gold/60 text-accent-gold'
+                                          : 'btn-secondary'
+                                      }`}
+                                    >
+                                      {iteratingPromptText === promptText ? '✕ Iterate' : '↻ Iterate'}
+                                    </button>
+                                    <button
+                                      onClick={() => copyText(promptText)}
+                                      className="btn-secondary text-xs px-2.5 py-1"
+                                    >
+                                      Copy
+                                    </button>
+                                  </div>
                                 </div>
+
+                                {iteratingPromptText === promptText && (
+                                  <IteratePanel
+                                    projectId={id}
+                                    originalPrompt={promptText}
+                                    initialImage={initialImageForChild}
+                                    initialImageModel={imageModel}
+                                    onClose={() => setIteratingPromptText(null)}
+                                  />
+                                )}
 
                                 {/* Per-prompt image area */}
                                 {imgState?.status === 'generating' && (

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Sidebar from '@/components/Sidebar';
 import ReactMarkdown from 'react-markdown';
+import Link from 'next/link';
 
 interface Generation {
   id: string;
@@ -167,6 +168,14 @@ export default function HistoryPage({ params }: { params: { id: string } }) {
                             >
                               {variationsLoading === gen.id ? 'Generating…' : '5 Variations'}
                             </button>
+                            {gen.isWinner && (
+                              <Link
+                                href={`/projects/${id}/iterate`}
+                                className="px-3 py-1 rounded text-xs font-medium border bg-accent-gold/10 border-accent-gold/40 text-accent-gold hover:bg-accent-gold/20 transition-colors"
+                              >
+                                ↻ Iterate
+                              </Link>
+                            )}
                             <button onClick={() => copyText(gen.output)} className="btn-secondary text-xs px-3 py-1">
                               Copy
                             </button>

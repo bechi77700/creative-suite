@@ -10,6 +10,7 @@ const navItems = [
 
 const moduleItems = [
   { label: 'Static Brief', icon: '▣', path: 'static-brief' },
+  { label: 'Iterate', icon: '↻', path: 'iterate' },
   { label: 'Video Script', icon: '▶', path: 'video-script' },
   { label: 'Hook Generator', icon: '⚡', path: 'hooks' },
   { label: 'History', icon: '◷', path: 'history' },

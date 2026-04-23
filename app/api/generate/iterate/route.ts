@@ -1,0 +1,222 @@
+import { prisma } from '@/lib/prisma';
+import { getAnthropic, MODEL, GENERATION_RULES } from '@/lib/anthropic';
+
+export const maxDuration = 300;
+
+const NANOBANANA_FORMAT = `NANOBANANA PROMPT FORMAT — use exactly this structure for every prompt:
+[Subject / Action]
++ [Art Style / Medium]
++ [Lighting / Atmosphere]
++ [Camera / Angle]
++ [Composition & Layout Details]
++ [Brand Color Instructions — use brand colors from project documents]
++ [Product Representation — always write: "use uploaded product photo as visual reference"]
++ [Specific Text: "Exact headline or claim" in "Font style description"]
++ [Clarity & Legibility Constraints]
+--ar [Aspect Ratio — choose freely: 1:1 / 4:5 / 9:16]`;
+
+// Strategy → instruction text fed to Claude
+const STRATEGY_INSTRUCTIONS: Record<string, string> = {
+  'hook': 'HOOK VARIATION — Keep the visual format, composition, and structure identical. Generate completely new headlines/hooks that test different psychological triggers (urgency, curiosity, fear, status, transformation, etc.).',
+  'format': 'FORMAT SWAP — Keep the message, headline, and angle exactly. Change the visual format and composition entirely (split-screen → product hero / before-after → mechanism diagram / etc.).',
+  'angle': 'ANGLE PIVOT — Keep the visual structure and composition. Change the psychological angle: if original was pain-based, try desire-based. If logical, try emotional. If problem-aware, try solution-aware.',
+  'social-proof': 'SOCIAL PROOF SWAP — Keep everything except the credibility element. Swap the proof type: number → expert endorsement → testimonial → media logo → user count → before-after photo proof.',
+  'pain-promise': 'PAIN/PROMISE INTENSIFICATION — Keep the structure and angle. Push the emotional lever HARDER. Make the pain more visceral, the promise more extreme, the urgency more immediate. No softening.',
+  'demographic': 'DEMOGRAPHIC PIVOT — Keep the visual format and core message. Adapt the copy and visual cues to a different sub-segment of the target market (e.g. lipedema → post-pregnancy → menopause → desk job).',
+  'cta': 'CTA / URGENCY VARIATION — Keep everything except the call-to-action and urgency mechanism. Test new CTAs (Buy 1 Get 1 / Free shipping today / Limited stock / Risk-free trial / etc.).',
+};
+
+function sse(event: string, data: unknown) {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
+function buildKnowledgeContext(globalKnowledge: { category: string; name: string }[]) {
+  const staticAds = globalKnowledge.filter((k) => k.category === 'static_ads');
+  const rest = globalKnowledge.filter((k) => k.category !== 'static_ads');
+  return [
+    ...staticAds.map((k) => `[STATIC ADS REFERENCE — ${k.name}]`),
+    ...rest.map((k) => `[${k.category.toUpperCase()} — ${k.name}]`),
+  ].join('\n');
+}
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+    const {
+      projectId,
+      originalPrompt,
+      strategies = [],
+      otherInstructions = '',
+      count,
+    }: {
+      projectId: string;
+      originalPrompt: string;
+      strategies?: string[];
+      otherInstructions?: string;
+      count?: number;
+    } = body;
+
+    if (!originalPrompt?.trim()) {
+      return new Response(JSON.stringify({ error: 'Original prompt is required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (strategies.length === 0 && !otherInstructions.trim()) {
+      return new Response(
+        JSON.stringify({ error: 'Pick at least one strategy or write custom instructions' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+
+    const [project, globalKnowledge] = await Promise.all([
+      prisma.brandProject.findUnique({ where: { id: projectId }, include: { documents: true } }),
+      prisma.globalKnowledge.findMany(),
+    ]);
+    if (!project) {
+      return new Response(JSON.stringify({ error: 'Project not found' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    const brandContext = project.documents.map((d) => `[${d.type.toUpperCase()} — ${d.name}]`).join('\n');
+    const knowledgeContext = buildKnowledgeContext(globalKnowledge);
+    const n = Math.max(1, Math.min(20, count || 3));
+
+    const strategyBlock = strategies
+      .map((s) => STRATEGY_INSTRUCTIONS[s])
+      .filter(Boolean)
+      .map((line, i) => `${i + 1}. ${line}`)
+      .join('\n');
+
+    const otherBlock = otherInstructions.trim()
+      ? `\nADDITIONAL CUSTOM ITERATION INSTRUCTIONS FROM USER (apply these as the most important constraint):\n${otherInstructions.trim()}`
+      : '';
+
+    const promptText = `${GENERATION_RULES}
+
+You are iterating on a Meta Ads static creative that has ALREADY been validated as a winner.
+
+BRAND: ${project.name}
+
+GLOBAL KNOWLEDGE BASE:
+${knowledgeContext || '(none)'}
+
+BRAND DOCUMENTS:
+${brandContext || '(none)'}
+
+${NANOBANANA_FORMAT}
+
+─────────────────────────────────────────────
+ORIGINAL WINNING PROMPT (do NOT change its core DNA — only iterate along the chosen axes)
+─────────────────────────────────────────────
+\`\`\`
+${originalPrompt.trim()}
+\`\`\`
+
+─────────────────────────────────────────────
+ITERATION STRATEGIES TO APPLY
+─────────────────────────────────────────────
+${strategyBlock || '(none — use only the custom instructions below)'}
+${otherBlock}
+
+─────────────────────────────────────────────
+CORE RULES
+─────────────────────────────────────────────
+- Each iteration must keep what already works (the "winning DNA"). Only vary along the requested axes.
+- Iterations should feel like SIBLINGS of the original, not unrelated new ads.
+- Each iteration must clearly differ from the others on the chosen axis.
+- ${n} iterations total.
+
+─────────────────────────────────────────────
+OUTPUT — use exactly this structure, nothing else:
+─────────────────────────────────────────────
+
+${Array.from({ length: n }, (_, i) => `
+## ITERATION ${i + 1}
+
+**Iterates on:** [name the axis(es) varied — e.g. "Hook variation: urgency angle" / "Format swap: now a comparison grid"]
+
+\`\`\`
+[Subject / Action]
++ [Art Style / Medium]
++ [Lighting / Atmosphere]
++ [Camera / Angle]
++ [Composition & Layout Details]
++ [Brand Color Instructions]
++ [Product Representation — use uploaded product photo as visual reference]
++ [Specific Text: "Exact headline" in "Font style"]
++ [Clarity & Legibility Constraints]
+--ar [ratio]
+\`\`\`
+
+**What changed vs original:** [one sentence — what specifically you modified and why this should test well]
+`).join('\n')}`;
+
+    const anthropic = getAnthropic();
+    const encoder = new TextEncoder();
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        let fullText = '';
+        try {
+          const messageStream = anthropic.messages.stream({
+            model: MODEL,
+            max_tokens: 2500 + n * 500,
+            messages: [{ role: 'user', content: promptText }],
+          });
+
+          for await (const chunk of messageStream) {
+            if (
+              chunk.type === 'content_block_delta' &&
+              chunk.delta.type === 'text_delta'
+            ) {
+              const text = chunk.delta.text;
+              fullText += text;
+              controller.enqueue(encoder.encode(sse('text', { text })));
+            }
+          }
+
+          const generation = await prisma.generation.create({
+            data: {
+              projectId,
+              module: 'iterate',
+              inputs: JSON.stringify({
+                originalPrompt,
+                strategies,
+                otherInstructions,
+                count: n,
+              }),
+              output: fullText,
+            },
+          });
+
+          controller.enqueue(encoder.encode(sse('done', { generationId: generation.id })));
+          controller.close();
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error('[iterate stream] ERROR:', message);
+          controller.enqueue(encoder.encode(sse('error', { error: message })));
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      },
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[iterate] ERROR:', message);
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+}
