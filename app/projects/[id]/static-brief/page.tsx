@@ -678,7 +678,6 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
                                     projectId={id}
                                     originalPrompt={promptText}
                                     initialImage={initialImageForChild}
-                                    initialImageModel={imageModel}
                                     onClose={() => setIteratingPromptText(null)}
                                   />
                                 )}

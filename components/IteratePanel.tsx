@@ -2,8 +2,12 @@
 
 import { useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import PromptImageGenerator, { IMAGE_MODELS } from './PromptImageGenerator';
+import PromptImageGenerator from './PromptImageGenerator';
 import { parseSSE, extractClosedCodeBlocks } from '@/lib/streaming';
+
+// Image iterations are always rendered with nano-banana-2 (with the ref
+// image forwarded so it's faithful to the source).
+const IMAGE_MODEL = 'nano-banana-2';
 
 export const ITERATION_STRATEGIES = [
   { value: 'hook', label: 'Hook variation', desc: 'Same visual, new headlines' },
@@ -24,11 +28,10 @@ interface ImageState {
 
 interface Props {
   projectId: string;
-  originalPrompt: string;
-  /** Pre-loaded ref image (forwarded from parent) — used for image gen of iterations */
+  /** Original winning prompt — optional if a reference image is provided */
+  originalPrompt?: string;
+  /** Pre-loaded ref image (forwarded from parent) — used as source AND for image gen */
   initialImage?: { base64: string; mimeType: string; previewDataUri: string };
-  /** Default image model */
-  initialImageModel?: string;
   /** Optional callback when the panel is closed/dismissed */
   onClose?: () => void;
   /** Hide the close button (when used standalone on its own page) */
@@ -37,16 +40,14 @@ interface Props {
 
 export default function IteratePanel({
   projectId,
-  originalPrompt,
+  originalPrompt = '',
   initialImage,
-  initialImageModel = 'nano-banana-2',
   onClose,
   hideClose,
 }: Props) {
   const [strategies, setStrategies] = useState<Set<string>>(new Set());
   const [otherInstructions, setOtherInstructions] = useState('');
   const [count, setCount] = useState('3');
-  const [imageModel, setImageModel] = useState(initialImageModel);
   const [autoImagesEnabled, setAutoImagesEnabled] = useState(true);
 
   const [loading, setLoading] = useState(false);
@@ -68,13 +69,10 @@ export default function IteratePanel({
   const fireImageGen = async (promptText: string) => {
     setImageStates((prev) => ({ ...prev, [promptText]: { status: 'generating' } }));
 
-    let referenceImageBase64: string | undefined;
-    let referenceMimeType: string | undefined;
-    const currentImageModelConfig = IMAGE_MODELS.find((m) => m.value === imageModel);
-    if (currentImageModelConfig?.allowsRef && initialImage) {
-      referenceImageBase64 = initialImage.base64;
-      referenceMimeType = initialImage.mimeType;
-    }
+    // When iterating, if a reference image was provided we ALWAYS forward it
+    // to nano-banana so the new image stays faithful to the source.
+    const referenceImageBase64 = initialImage?.base64;
+    const referenceMimeType = initialImage?.mimeType;
 
     try {
       const res = await fetch('/api/generate/image', {
@@ -82,7 +80,7 @@ export default function IteratePanel({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: promptText,
-          model: imageModel,
+          model: IMAGE_MODEL,
           referenceImageBase64,
           referenceMimeType,
         }),
@@ -115,6 +113,10 @@ export default function IteratePanel({
       setError('Pick at least one strategy or write custom instructions.');
       return;
     }
+    if (!originalPrompt.trim() && !initialImage) {
+      setError('Provide a reference image, an original prompt, or both.');
+      return;
+    }
     const n = Math.max(1, parseInt(count) || 3);
 
     setLoading(true);
@@ -130,6 +132,8 @@ export default function IteratePanel({
         body: JSON.stringify({
           projectId,
           originalPrompt,
+          referenceImageBase64: initialImage?.base64,
+          referenceMimeType: initialImage?.mimeType,
           strategies: Array.from(strategies),
           otherInstructions,
           count: n,
@@ -230,30 +234,19 @@ export default function IteratePanel({
         />
       </div>
 
-      <div className="flex gap-3">
-        <div className="flex-1">
-          <label className="text-text-muted text-[10px] uppercase tracking-widest block mb-1">Count</label>
-          <input
-            className="input-field text-xs"
-            type="number"
-            min="1"
-            max="20"
-            value={count}
-            onChange={(e) => setCount(e.target.value)}
-          />
-        </div>
-        <div className="flex-[2]">
-          <label className="text-text-muted text-[10px] uppercase tracking-widest block mb-1">Image model</label>
-          <select
-            className="input-field text-xs"
-            value={imageModel}
-            onChange={(e) => setImageModel(e.target.value)}
-          >
-            {IMAGE_MODELS.map((m) => (
-              <option key={m.value} value={m.value}>{m.label}</option>
-            ))}
-          </select>
-        </div>
+      <div>
+        <label className="text-text-muted text-[10px] uppercase tracking-widest block mb-1">Count</label>
+        <input
+          className="input-field text-xs"
+          type="number"
+          min="1"
+          max="20"
+          value={count}
+          onChange={(e) => setCount(e.target.value)}
+        />
+        <p className="text-text-muted text-[10px] mt-1">
+          Images render with Nano Banana 2{initialImage ? ' — your reference photo will be passed in for every iteration.' : '.'}
+        </p>
       </div>
 
       <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer select-none">
@@ -334,7 +327,7 @@ export default function IteratePanel({
                               key={`${promptText}-done`}
                               prompt={promptText}
                               initialImage={initialImage}
-                              initialModel={imageModel}
+                              initialModel={IMAGE_MODEL}
                               autoGenerateImageUrl={imgState.url}
                             />
                           )}
@@ -343,7 +336,7 @@ export default function IteratePanel({
                               key={`${promptText}-manual`}
                               prompt={promptText}
                               initialImage={initialImage}
-                              initialModel={imageModel}
+                              initialModel={IMAGE_MODEL}
                             />
                           )}
                         </div>

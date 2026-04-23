@@ -44,20 +44,26 @@ export async function POST(req: Request) {
     const body = await req.json();
     const {
       projectId,
-      originalPrompt,
+      originalPrompt = '',
+      referenceImageBase64,
+      referenceMimeType,
       strategies = [],
       otherInstructions = '',
       count,
     }: {
       projectId: string;
-      originalPrompt: string;
+      originalPrompt?: string;
+      referenceImageBase64?: string;
+      referenceMimeType?: string;
       strategies?: string[];
       otherInstructions?: string;
       count?: number;
     } = body;
 
-    if (!originalPrompt?.trim()) {
-      return new Response(JSON.stringify({ error: 'Original prompt is required' }), {
+    const hasPrompt = !!originalPrompt?.trim();
+    const hasImage = !!referenceImageBase64;
+    if (!hasPrompt && !hasImage) {
+      return new Response(JSON.stringify({ error: 'Provide a reference image, an original prompt, or both.' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
       });
@@ -94,6 +100,27 @@ export async function POST(req: Request) {
       ? `\nADDITIONAL CUSTOM ITERATION INSTRUCTIONS FROM USER (apply these as the most important constraint):\n${otherInstructions.trim()}`
       : '';
 
+    const sourceBlock = hasPrompt && hasImage
+      ? `─────────────────────────────────────────────
+ORIGINAL WINNING PROMPT (do NOT change its core DNA — only iterate along the chosen axes)
+─────────────────────────────────────────────
+\`\`\`
+${originalPrompt.trim()}
+\`\`\`
+
+A reference image of the original winning creative is also attached above. Use BOTH the prompt and the image as the source of truth for what's already working.`
+      : hasPrompt
+      ? `─────────────────────────────────────────────
+ORIGINAL WINNING PROMPT (do NOT change its core DNA — only iterate along the chosen axes)
+─────────────────────────────────────────────
+\`\`\`
+${originalPrompt.trim()}
+\`\`\``
+      : `─────────────────────────────────────────────
+ORIGINAL WINNING CREATIVE (image attached above — analyze it carefully)
+─────────────────────────────────────────────
+The user did NOT provide a written prompt. Look at the attached reference image and treat it as the winning creative. Identify its visual structure, headline, hook, layout, color treatment, and psychological angle. Each iteration must keep the winning DNA visible in this image.`;
+
     const promptText = `${GENERATION_RULES}
 
 You are iterating on a Meta Ads static creative that has ALREADY been validated as a winner.
@@ -108,12 +135,7 @@ ${brandContext || '(none)'}
 
 ${NANOBANANA_FORMAT}
 
-─────────────────────────────────────────────
-ORIGINAL WINNING PROMPT (do NOT change its core DNA — only iterate along the chosen axes)
-─────────────────────────────────────────────
-\`\`\`
-${originalPrompt.trim()}
-\`\`\`
+${sourceBlock}
 
 ─────────────────────────────────────────────
 ITERATION STRATEGIES TO APPLY
@@ -161,10 +183,26 @@ ${Array.from({ length: n }, (_, i) => `
       async start(controller) {
         let fullText = '';
         try {
+          const userContent: Array<
+            | { type: 'text'; text: string }
+            | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
+          > = [];
+          if (hasImage) {
+            userContent.push({
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: (referenceMimeType as string) || 'image/jpeg',
+                data: referenceImageBase64 as string,
+              },
+            });
+          }
+          userContent.push({ type: 'text', text: promptText });
+
           const messageStream = anthropic.messages.stream({
             model: MODEL,
             max_tokens: 2500 + n * 500,
-            messages: [{ role: 'user', content: promptText }],
+            messages: [{ role: 'user', content: userContent }],
           });
 
           for await (const chunk of messageStream) {
@@ -184,6 +222,7 @@ ${Array.from({ length: n }, (_, i) => `
               module: 'iterate',
               inputs: JSON.stringify({
                 originalPrompt,
+                hasReferenceImage: hasImage,
                 strategies,
                 otherInstructions,
                 count: n,
