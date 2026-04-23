@@ -3,10 +3,9 @@
 import { useRef, useState } from 'react';
 
 export const IMAGE_MODELS = [
-  { value: 'nano-banana', label: 'Nano Banana (Google original, fast)', needsRef: false, allowsRef: false },
-  { value: 'nano-banana-2', label: 'Nano Banana 2 (Google new, fast, supports ref)', needsRef: false, allowsRef: true },
-  { value: 'nano-banana-pro', label: 'Nano Banana Pro (state-of-the-art, supports ref)', needsRef: false, allowsRef: true },
-  { value: 'nano-banana-edit', label: 'Nano Banana Edit (requires ref image)', needsRef: true, allowsRef: true },
+  { value: 'nano-banana-pro', label: 'Nano Banana Pro (best — uses ref image if provided)', needsRef: false, allowsRef: true },
+  { value: 'nano-banana-2', label: 'Nano Banana 2 (fast, uses ref image if provided)', needsRef: false, allowsRef: true },
+  { value: 'nano-banana', label: 'Nano Banana (original, uses ref image if provided)', needsRef: false, allowsRef: true },
   { value: 'flux-pro-ultra', label: 'Flux Pro Ultra (highest realism, no ref)', needsRef: false, allowsRef: false },
   { value: 'recraft-v3', label: 'Recraft v3 (best for ads with text)', needsRef: false, allowsRef: false },
   { value: 'imagen4', label: 'Imagen 4 (Google, photoreal)', needsRef: false, allowsRef: false },
