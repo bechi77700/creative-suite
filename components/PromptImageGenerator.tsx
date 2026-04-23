@@ -203,7 +203,11 @@ export default function PromptImageGenerator({ prompt, initialImage, initialMode
       {imageUrl && !loading && (
         <div className="space-y-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={imageUrl} alt="generated" className="w-full rounded-md border border-bg-border" />
+          <img
+            src={imageUrl}
+            alt="generated"
+            className="max-w-xs max-h-80 w-auto h-auto rounded-md border border-bg-border mx-auto block"
+          />
 
           <div className="flex gap-2">
             <button onClick={downloadImage} className="btn-secondary text-xs flex-1">

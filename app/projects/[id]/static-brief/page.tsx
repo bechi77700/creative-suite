@@ -88,7 +88,7 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
   const productRefInputRef = useRef<HTMLInputElement>(null);
 
   // Image model
-  const [imageModel, setImageModel] = useState('nano-banana-pro');
+  const [imageModel, setImageModel] = useState('nano-banana-2');
 
   // Output
   const [loading, setLoading] = useState(false);
