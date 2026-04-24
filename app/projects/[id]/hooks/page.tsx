@@ -7,6 +7,17 @@ import ReactMarkdown from 'react-markdown';
 
 type Mode = 'from_script' | 'from_brand';
 
+interface Run {
+  id: string;
+  mode: Mode;
+  output: string;
+  generationId: string;
+  isWinner: boolean;
+  variationsOutput: string;
+  variationsLoading: boolean;
+  loading: boolean;
+}
+
 export default function HookGeneratorPage({ params }: { params: { id: string } }) {
   const { id } = params;
   const [projectName, setProjectName] = useState('');
@@ -14,12 +25,7 @@ export default function HookGeneratorPage({ params }: { params: { id: string } }
   const [mode, setMode] = useState<Mode>('from_brand');
   const [script, setScript] = useState('');
   const [instructions, setInstructions] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [output, setOutput] = useState('');
-  const [generationId, setGenerationId] = useState('');
-  const [isWinner, setIsWinner] = useState(false);
-  const [variationsLoading, setVariationsLoading] = useState(false);
-  const [variationsOutput, setVariationsOutput] = useState('');
+  const [runs, setRuns] = useState<Run[]>([]);
 
   useEffect(() => {
     fetch(`/api/projects/${id}`).then((r) => r.json()).then((d) => {
@@ -28,43 +34,81 @@ export default function HookGeneratorPage({ params }: { params: { id: string } }
     });
   }, [id]);
 
+  const updateRun = (runId: string, patch: Partial<Run>) => {
+    setRuns((prev) => prev.map((r) => (r.id === runId ? { ...r, ...patch } : r)));
+  };
+
   const generate = async () => {
     if (mode === 'from_script' && !script.trim()) return;
-    setLoading(true);
-    setOutput('');
-    setVariationsOutput('');
-    const res = await fetch('/api/generate/hooks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId: id, mode, script, instructions }),
-    });
-    const data = await res.json();
-    setOutput(data.output);
-    setGenerationId(data.generationId);
-    setIsWinner(false);
-    setLoading(false);
+    const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const newRun: Run = {
+      id: runId,
+      mode,
+      output: '',
+      generationId: '',
+      isWinner: false,
+      variationsOutput: '',
+      variationsLoading: false,
+      loading: true,
+    };
+    setRuns((prev) => [newRun, ...prev]);
+
+    try {
+      const res = await fetch('/api/generate/hooks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: id, mode, script, instructions }),
+      });
+      const data = await res.json();
+      updateRun(runId, {
+        output: data.output || '',
+        generationId: data.generationId || '',
+        loading: false,
+      });
+    } catch (e) {
+      updateRun(runId, {
+        output: `Error: ${e instanceof Error ? e.message : 'unknown'}`,
+        loading: false,
+      });
+    }
   };
 
-  const toggleWinner = async () => {
+  const toggleWinner = async (runId: string, generationId: string) => {
     const res = await fetch(`/api/history/${generationId}/winner`, { method: 'PATCH' });
     const data = await res.json();
-    setIsWinner(data.isWinner);
+    updateRun(runId, { isWinner: data.isWinner });
   };
 
-  const getVariations = async () => {
-    setVariationsLoading(true);
-    setVariationsOutput('');
+  const getVariations = async (runId: string, generationId: string) => {
+    updateRun(runId, { variationsLoading: true, variationsOutput: '' });
     const res = await fetch('/api/generate/variations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ generationId }),
     });
     const data = await res.json();
-    setVariationsOutput(data.output);
-    setVariationsLoading(false);
+    updateRun(runId, { variationsOutput: data.output || '', variationsLoading: false });
+  };
+
+  const deleteRun = async (runId: string) => {
+    const run = runs.find((r) => r.id === runId);
+    if (!run) return;
+    if (!confirm('Delete this generation?')) return;
+    if (run.generationId) {
+      try { await fetch(`/api/history/${run.generationId}`, { method: 'DELETE' }); } catch { /* noop */ }
+    }
+    setRuns((prev) => prev.filter((r) => r.id !== runId));
+  };
+
+  const clearAll = () => {
+    if (runs.length === 0) return;
+    if (!confirm(`Clear all ${runs.length} generation${runs.length !== 1 ? 's' : ''} from this view? (Saved generations stay in History.)`)) return;
+    setRuns([]);
   };
 
   const copyText = (text: string) => navigator.clipboard.writeText(text);
+
+  const anyLoading = runs.some((r) => r.loading);
 
   return (
     <div className="flex h-screen bg-bg-base overflow-hidden">
@@ -75,14 +119,13 @@ export default function HookGeneratorPage({ params }: { params: { id: string } }
       ) : (
       <div className="flex-1 flex overflow-hidden">
         {/* Left: Form */}
-        <div className="w-80 border-r border-bg-border overflow-y-auto bg-bg-elevated">
+        <div className="w-80 border-r border-bg-border overflow-y-auto bg-bg-elevated flex flex-col">
           <div className="px-5 py-5 border-b border-bg-border">
             <h1 className="text-text-primary font-semibold text-base">Hook Generator</h1>
             <p className="text-text-secondary text-xs mt-1">12 scroll-stopping hooks — written + visual</p>
           </div>
 
-          <div className="p-5 space-y-5">
-            {/* Mode selector */}
+          <div className="p-5 space-y-5 flex-1">
             <div>
               <label className="text-text-muted text-xs mb-2 block uppercase tracking-widest">Mode</label>
               <div className="space-y-1.5">
@@ -149,89 +192,118 @@ export default function HookGeneratorPage({ params }: { params: { id: string } }
                 onChange={(e) => setInstructions(e.target.value)}
               />
             </div>
+          </div>
 
+          <div className="px-5 py-4 border-t border-bg-border space-y-2">
             <button
               onClick={generate}
               className="btn-primary w-full"
-              disabled={loading || (mode === 'from_script' && !script.trim())}
+              disabled={anyLoading || (mode === 'from_script' && !script.trim())}
             >
-              {loading ? 'Generating hooks…' : 'Generate 12 Hooks'}
+              {anyLoading ? 'Generating hooks…' : 'Generate 12 Hooks'}
             </button>
+            {runs.length > 0 && (
+              <button
+                onClick={clearAll}
+                className="text-text-muted hover:text-accent-red text-[10px] uppercase tracking-widest w-full text-center pt-1 transition-colors"
+              >
+                Clear all ({runs.length})
+              </button>
+            )}
           </div>
         </div>
 
         {/* Right: Output */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          {loading && (
-            <div className="card p-8 flex items-center justify-center">
-              <div className="text-center">
-                <div className="w-8 h-8 border-2 border-accent-gold/30 border-t-accent-gold rounded-full animate-spin mx-auto mb-3" />
-                <p className="text-text-secondary text-sm">Generating 12 hooks…</p>
-                <p className="text-text-muted text-xs mt-1">No self-censorship. Full creative freedom.</p>
-              </div>
-            </div>
-          )}
-
-          {output && !loading && (
-            <>
-              <div className="card">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-bg-border">
-                  <div>
-                    <span className="text-text-muted text-xs uppercase tracking-widest">Hooks</span>
-                    <span className="text-text-muted text-xs ml-3">
-                      {mode === 'from_brand' ? 'From brand knowledge' : 'From script'}
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={toggleWinner}
-                      className={`px-3 py-1 rounded text-xs font-medium border transition-colors ${
-                        isWinner
-                          ? 'bg-accent-gold/20 border-accent-gold/60 text-accent-gold'
-                          : 'bg-transparent border-bg-border text-text-muted hover:border-accent-gold/40 hover:text-accent-gold'
-                      }`}
-                    >
-                      {isWinner ? '★ Winner' : '☆ Mark Winner'}
-                    </button>
-                    <button onClick={getVariations} className="btn-secondary text-xs px-3 py-1" disabled={variationsLoading}>
-                      More Hooks
-                    </button>
-                    <button onClick={() => copyText(output)} className="btn-secondary text-xs px-3 py-1">Copy All</button>
-                  </div>
-                </div>
-                <div className="p-5 result-content">
-                  <ReactMarkdown>{output}</ReactMarkdown>
-                </div>
-              </div>
-
-              {variationsLoading && (
-                <div className="card p-6 flex items-center justify-center gap-3">
-                  <div className="w-5 h-5 border-2 border-accent-gold/30 border-t-accent-gold rounded-full animate-spin" />
-                  <span className="text-text-secondary text-sm">Generating more hooks…</span>
-                </div>
-              )}
-
-              {variationsOutput && !variationsLoading && (
-                <div className="card">
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-bg-border">
-                    <span className="text-text-muted text-xs uppercase tracking-widest">More Hooks</span>
-                    <button onClick={() => copyText(variationsOutput)} className="btn-secondary text-xs px-3 py-1">Copy All</button>
-                  </div>
-                  <div className="p-5 result-content">
-                    <ReactMarkdown>{variationsOutput}</ReactMarkdown>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-
-          {!output && !loading && (
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {runs.length === 0 && (
             <div className="card p-12 text-center">
               <p className="text-text-muted text-3xl mb-3">⚡</p>
               <p className="text-text-secondary text-sm">Generate 12 scroll-stopping hooks.</p>
               <p className="text-text-muted text-xs mt-1">Mix of written hooks + visual hook ideas. Scored 1-10.</p>
             </div>
           )}
+
+          {runs.map((run) => (
+            <div key={run.id} className="space-y-3 group/run">
+              {run.loading && (
+                <div className="card p-8 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="w-8 h-8 border-2 border-accent-gold/30 border-t-accent-gold rounded-full animate-spin mx-auto mb-3" />
+                    <p className="text-text-secondary text-sm">Generating 12 hooks…</p>
+                    <p className="text-text-muted text-xs mt-1">No self-censorship. Full creative freedom.</p>
+                  </div>
+                </div>
+              )}
+
+              {run.output && !run.loading && (
+                <>
+                  <div className="card">
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-bg-border">
+                      <div>
+                        <span className="text-text-muted text-xs uppercase tracking-widest">Hooks</span>
+                        <span className="text-text-muted text-xs ml-3">
+                          {run.mode === 'from_brand' ? 'From brand knowledge' : 'From script'}
+                        </span>
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        {run.generationId && (
+                          <>
+                            <button
+                              onClick={() => toggleWinner(run.id, run.generationId)}
+                              className={`px-3 py-1 rounded text-xs font-medium border transition-colors ${
+                                run.isWinner
+                                  ? 'bg-accent-gold/20 border-accent-gold/60 text-accent-gold'
+                                  : 'bg-transparent border-bg-border text-text-muted hover:border-accent-gold/40 hover:text-accent-gold'
+                              }`}
+                            >
+                              {run.isWinner ? '★ Winner' : '☆ Mark Winner'}
+                            </button>
+                            <button
+                              onClick={() => getVariations(run.id, run.generationId)}
+                              className="btn-secondary text-xs px-3 py-1"
+                              disabled={run.variationsLoading}
+                            >
+                              More Hooks
+                            </button>
+                          </>
+                        )}
+                        <button onClick={() => copyText(run.output)} className="btn-secondary text-xs px-3 py-1">Copy All</button>
+                        <button
+                          onClick={() => deleteRun(run.id)}
+                          title="Delete this generation"
+                          className="text-text-muted/40 hover:text-accent-red text-sm w-7 h-7 flex items-center justify-center rounded transition-colors opacity-0 group-hover/run:opacity-100"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                    <div className="p-5 result-content">
+                      <ReactMarkdown>{run.output}</ReactMarkdown>
+                    </div>
+                  </div>
+
+                  {run.variationsLoading && (
+                    <div className="card p-6 flex items-center justify-center gap-3">
+                      <div className="w-5 h-5 border-2 border-accent-gold/30 border-t-accent-gold rounded-full animate-spin" />
+                      <span className="text-text-secondary text-sm">Generating more hooks…</span>
+                    </div>
+                  )}
+
+                  {run.variationsOutput && !run.variationsLoading && (
+                    <div className="card">
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-bg-border">
+                        <span className="text-text-muted text-xs uppercase tracking-widest">More Hooks</span>
+                        <button onClick={() => copyText(run.variationsOutput)} className="btn-secondary text-xs px-3 py-1">Copy All</button>
+                      </div>
+                      <div className="p-5 result-content">
+                        <ReactMarkdown>{run.variationsOutput}</ReactMarkdown>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          ))}
         </div>
       </div>
       )}

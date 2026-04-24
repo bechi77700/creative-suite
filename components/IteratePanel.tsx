@@ -27,6 +27,17 @@ interface ImageState {
   error?: string;
 }
 
+interface IterationRun {
+  id: string;
+  count: number;
+  strategiesUsed: string[];
+  streamedText: string;
+  loading: boolean;
+  error: string;
+  imageStates: Record<string, ImageState>;
+  withImages: boolean;
+}
+
 interface Props {
   projectId: string;
   /** Original winning prompt — optional if a reference image is provided */
@@ -61,12 +72,11 @@ export default function IteratePanel({
   const [count, setCount] = useState('3');
   const [autoImagesEnabled, setAutoImagesEnabled] = useState(true);
 
-  const [loading, setLoading] = useState(false);
-  const [streamedText, setStreamedText] = useState('');
-  const [error, setError] = useState('');
-  const [imageStates, setImageStates] = useState<Record<string, ImageState>>({});
+  const [runs, setRuns] = useState<IterationRun[]>([]);
+  const [validationError, setValidationError] = useState('');
 
-  const firedImagePromptsRef = useRef<Set<string>>(new Set());
+  // Per-run fired image-prompt tracking
+  const firedImagePromptsRef = useRef<Map<string, Set<string>>>(new Map());
 
   const toggleStrategy = (value: string) => {
     setStrategies((prev) => {
@@ -77,11 +87,21 @@ export default function IteratePanel({
     });
   };
 
-  const fireImageGen = async (promptText: string) => {
-    setImageStates((prev) => ({ ...prev, [promptText]: { status: 'generating' } }));
+  const updateRun = (runId: string, patch: Partial<IterationRun> | ((r: IterationRun) => Partial<IterationRun>)) => {
+    setRuns((prev) =>
+      prev.map((r) => {
+        if (r.id !== runId) return r;
+        const p = typeof patch === 'function' ? patch(r) : patch;
+        return { ...r, ...p };
+      }),
+    );
+  };
 
-    // When iterating, if reference images were provided we ALWAYS forward them
-    // to nano-banana so the new image stays faithful to the source.
+  const fireImageGen = async (runId: string, promptText: string) => {
+    updateRun(runId, (r) => ({
+      imageStates: { ...r.imageStates, [promptText]: { status: 'generating' } },
+    }));
+
     const referenceImages = hasRefs
       ? refs.map((r) => ({ base64: r.base64, mimeType: r.mimeType }))
       : undefined;
@@ -99,42 +119,56 @@ export default function IteratePanel({
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: `Server error ${res.status}` }));
-        setImageStates((prev) => ({
-          ...prev,
-          [promptText]: { status: 'error', error: err.error || `Error ${res.status}` },
+        updateRun(runId, (r) => ({
+          imageStates: {
+            ...r.imageStates,
+            [promptText]: { status: 'error', error: err.error || `Error ${res.status}` },
+          },
         }));
         return;
       }
 
       const data = await res.json();
-      setImageStates((prev) => ({
-        ...prev,
-        [promptText]: { status: 'done', url: data.imageUrl },
+      updateRun(runId, (r) => ({
+        imageStates: {
+          ...r.imageStates,
+          [promptText]: { status: 'done', url: data.imageUrl },
+        },
       }));
     } catch (e) {
-      setImageStates((prev) => ({
-        ...prev,
-        [promptText]: { status: 'error', error: e instanceof Error ? e.message : 'Unexpected error' },
+      updateRun(runId, (r) => ({
+        imageStates: {
+          ...r.imageStates,
+          [promptText]: { status: 'error', error: e instanceof Error ? e.message : 'Unexpected error' },
+        },
       }));
     }
   };
 
   const handleGenerate = async () => {
+    setValidationError('');
     if (strategies.size === 0 && !otherInstructions.trim()) {
-      setError('Pick at least one strategy or write custom instructions.');
+      setValidationError('Pick at least one strategy or write custom instructions.');
       return;
     }
     if (!originalPrompt.trim() && !hasRefs) {
-      setError('Provide a reference image, an original prompt, or both.');
+      setValidationError('Provide a reference image, an original prompt, or both.');
       return;
     }
     const n = Math.max(1, parseInt(count) || 3);
-
-    setLoading(true);
-    setStreamedText('');
-    setError('');
-    setImageStates({});
-    firedImagePromptsRef.current = new Set();
+    const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const newRun: IterationRun = {
+      id: runId,
+      count: n,
+      strategiesUsed: Array.from(strategies),
+      streamedText: '',
+      loading: true,
+      error: '',
+      imageStates: {},
+      withImages: autoImagesEnabled,
+    };
+    setRuns((prev) => [newRun, ...prev]);
+    firedImagePromptsRef.current.set(runId, new Set());
 
     try {
       const res = await fetch('/api/generate/iterate', {
@@ -158,8 +192,7 @@ export default function IteratePanel({
           const err = await res.json();
           errMsg = err.error || errMsg;
         } catch { /* noop */ }
-        setError(errMsg);
-        setLoading(false);
+        updateRun(runId, { error: errMsg, loading: false });
         return;
       }
 
@@ -168,29 +201,45 @@ export default function IteratePanel({
         if (evt.event === 'text') {
           const chunk = (evt.data as { text: string }).text;
           accumulated += chunk;
-          setStreamedText(accumulated);
+          updateRun(runId, { streamedText: accumulated });
 
           if (autoImagesEnabled) {
             const blocks = extractClosedCodeBlocks(accumulated);
+            const fired = firedImagePromptsRef.current.get(runId)!;
             for (const block of blocks) {
-              if (!firedImagePromptsRef.current.has(block)) {
-                firedImagePromptsRef.current.add(block);
-                fireImageGen(block);
+              if (!fired.has(block)) {
+                fired.add(block);
+                fireImageGen(runId, block);
               }
             }
           }
         } else if (evt.event === 'error') {
-          setError((evt.data as { error: string }).error);
+          updateRun(runId, { error: (evt.data as { error: string }).error });
         }
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unexpected error');
+      updateRun(runId, { error: e instanceof Error ? e.message : 'Unexpected error' });
     }
 
-    setLoading(false);
+    updateRun(runId, { loading: false });
+  };
+
+  const deleteRun = (runId: string) => {
+    if (!confirm('Delete this iteration set?')) return;
+    firedImagePromptsRef.current.delete(runId);
+    setRuns((prev) => prev.filter((r) => r.id !== runId));
+  };
+
+  const clearAll = () => {
+    if (runs.length === 0) return;
+    if (!confirm(`Clear all ${runs.length} iteration set${runs.length !== 1 ? 's' : ''}?`)) return;
+    setRuns([]);
+    firedImagePromptsRef.current.clear();
   };
 
   const copyText = (text: string) => navigator.clipboard.writeText(text);
+
+  const anyLoading = runs.some((r) => r.loading);
 
   return (
     <div className="border border-accent-gold/30 bg-accent-gold/[0.03] rounded-lg p-5 mt-3 space-y-4">
@@ -199,11 +248,21 @@ export default function IteratePanel({
           <p className="text-text-primary text-sm font-semibold">Iterate on this prompt</p>
           <p className="text-text-muted text-xs mt-0.5">Generate sibling variations that keep what works.</p>
         </div>
-        {!hideClose && onClose && (
-          <button onClick={onClose} className="text-text-muted hover:text-text-primary text-xs">
-            ✕ Close
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {runs.length > 0 && (
+            <button
+              onClick={clearAll}
+              className="text-text-muted hover:text-accent-red text-[10px] uppercase tracking-widest transition-colors"
+            >
+              Clear all ({runs.length})
+            </button>
+          )}
+          {!hideClose && onClose && (
+            <button onClick={onClose} className="text-text-muted hover:text-text-primary text-xs">
+              ✕ Close
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Strategy pills */}
@@ -274,28 +333,59 @@ export default function IteratePanel({
       <button
         onClick={handleGenerate}
         className="btn-primary w-full text-xs"
-        disabled={loading}
+        disabled={anyLoading}
       >
-        {loading
-          ? `Generating ${parseInt(count) || 3} iteration${parseInt(count) === 1 ? '' : 's'}…`
+        {anyLoading
+          ? `Generating…`
           : `Generate ${parseInt(count) || 3} iteration${parseInt(count) === 1 ? '' : 's'}`}
       </button>
 
-      {error && (
+      {validationError && (
         <div className="border border-accent-red/40 bg-accent-red/5 rounded px-3 py-2 text-xs text-accent-red">
-          {error}
+          {validationError}
         </div>
       )}
 
-      {/* Streaming output */}
-      {(streamedText || (loading && !error)) && (
-        <div className="border-t border-bg-border pt-4">
-          <p className="text-text-secondary text-xs uppercase tracking-widest mb-3">
-            Iterations
-            {loading && <span className="ml-2 text-accent-gold animate-pulse">● streaming…</span>}
-          </p>
+      {/* Stack of iteration runs */}
+      {runs.map((run, idx) => (
+        <div key={run.id} className="border-t border-bg-border pt-4 group/run">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-text-secondary text-xs uppercase tracking-widest">
+              Iterations · run {runs.length - idx}
+              {run.loading && <span className="ml-2 text-accent-gold animate-pulse">● streaming…</span>}
+              {run.strategiesUsed.length > 0 && (
+                <span className="ml-2 text-text-muted normal-case">
+                  ({run.strategiesUsed.join(', ')})
+                </span>
+              )}
+            </p>
+            <div className="flex items-center gap-2">
+              {run.streamedText && !run.loading && (
+                <button
+                  onClick={() => copyText(run.streamedText)}
+                  className="btn-secondary text-xs px-2 py-1"
+                >
+                  Copy All
+                </button>
+              )}
+              <button
+                onClick={() => deleteRun(run.id)}
+                title="Delete this iteration set"
+                className="text-text-muted/40 hover:text-accent-red text-sm w-6 h-6 flex items-center justify-center rounded transition-colors opacity-0 group-hover/run:opacity-100"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          {run.error && (
+            <div className="border border-accent-red/40 bg-accent-red/5 rounded px-3 py-2 text-xs text-accent-red mb-3">
+              {run.error}
+            </div>
+          )}
+
           <div className="result-content">
-            {!streamedText && loading ? (
+            {!run.streamedText && run.loading ? (
               <div className="flex items-center gap-3 text-text-muted text-xs">
                 <div className="w-4 h-4 border-2 border-accent-gold/30 border-t-accent-gold rounded-full animate-spin" />
                 Waiting for first tokens…
@@ -307,7 +397,7 @@ export default function IteratePanel({
                     const isBlock = className || String(children).includes('\n');
                     const promptText = String(children).trim();
                     if (isBlock) {
-                      const imgState = imageStates[promptText];
+                      const imgState = run.imageStates[promptText];
                       return (
                         <div className="my-3">
                           <div className="relative group">
@@ -343,7 +433,7 @@ export default function IteratePanel({
                               autoGenerateImageUrl={imgState.url}
                             />
                           )}
-                          {!imgState && !loading && (
+                          {!imgState && !run.loading && (
                             <PromptImageGenerator
                               key={`${promptText}-manual`}
                               prompt={promptText}
@@ -362,12 +452,12 @@ export default function IteratePanel({
                   },
                 }}
               >
-                {streamedText}
+                {run.streamedText}
               </ReactMarkdown>
             )}
           </div>
         </div>
-      )}
+      ))}
     </div>
   );
 }
