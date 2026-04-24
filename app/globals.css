@@ -3,8 +3,8 @@
 @tailwind utilities;
 
 :root {
-  --font-sans: 'Inter', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --accent: 168 85 247;        /* violet electric, RGB triplet */
+  --accent-dim: 124 58 237;
 }
 
 * {
@@ -16,57 +16,85 @@ html, body {
 }
 
 body {
-  background-color: #080B10;
-  color: #F9FAFB;
-  font-family: var(--font-sans);
+  background-color: #000000;
+  color: #FAFAFA;
+  font-family: var(--font-sans), 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'cv11', 'ss01';
 }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #0D1117; }
-::-webkit-scrollbar-thumb { background: #1F2937; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #374151; }
+::-webkit-scrollbar-track { background: #0A0A0A; }
+::-webkit-scrollbar-thumb { background: #1F1F1F; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #2A2A2A; }
 
-::selection { background: rgba(212, 175, 55, 0.2); color: #F9FAFB; }
+::selection { background: rgba(168, 85, 247, 0.35); color: #FAFAFA; }
 
 @layer components {
+  /* Primary CTA — violet with glow halo */
   .btn-primary {
-    @apply px-4 py-2 bg-accent-gold text-bg-base font-semibold text-sm rounded-md
-           hover:bg-accent-gold-dim transition-colors duration-150
-           disabled:opacity-40 disabled:cursor-not-allowed;
+    @apply px-4 py-2 bg-accent-violet text-white font-semibold text-sm rounded-lg
+           shadow-glow-violet
+           hover:bg-accent-violet-dim hover:shadow-glow-violet-lg
+           transition-all duration-200
+           disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none;
   }
 
   .btn-secondary {
-    @apply px-4 py-2 bg-bg-card border border-bg-border text-text-secondary text-sm rounded-md
-           hover:border-accent-gold hover:text-text-primary transition-colors duration-150
+    @apply px-4 py-2 bg-bg-elevated border border-bg-border text-text-secondary text-sm rounded-lg
+           hover:border-accent-violet/50 hover:text-text-primary hover:bg-bg-hover
+           transition-all duration-150
            disabled:opacity-40 disabled:cursor-not-allowed;
   }
 
   .btn-danger {
-    @apply px-3 py-1.5 bg-transparent border border-accent-red/40 text-accent-red text-xs rounded-md
+    @apply px-3 py-1.5 bg-transparent border border-accent-red/40 text-accent-red text-xs rounded-lg
            hover:bg-accent-red/10 transition-colors duration-150;
   }
 
+  /* Pill — Trendtrack-style filter chip */
+  .pill {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium
+           bg-bg-elevated border border-bg-border text-text-secondary
+           hover:border-text-muted hover:text-text-primary
+           transition-colors duration-150 cursor-pointer select-none;
+  }
+
+  .pill-active {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold
+           bg-accent-violet/15 border border-accent-violet/50 text-accent-violet
+           cursor-pointer select-none;
+  }
+
   .input-field {
-    @apply w-full bg-bg-elevated border border-bg-border rounded-md px-3 py-2
+    @apply w-full bg-bg-elevated border border-bg-border rounded-lg px-3 py-2
            text-text-primary text-sm placeholder-text-muted
-           focus:outline-none focus:border-accent-gold/60 focus:ring-1 focus:ring-accent-gold/20
-           transition-colors duration-150;
+           focus:outline-none focus:border-accent-violet/60 focus:ring-2 focus:ring-accent-violet/20
+           transition-all duration-150;
   }
 
   .card {
-    @apply bg-bg-card border border-bg-border rounded-lg;
+    @apply bg-bg-card border border-bg-border rounded-xl;
   }
 
   .tag-active {
-    @apply inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium
-           bg-accent-gold/10 border border-accent-gold/40 text-accent-gold cursor-pointer select-none;
+    @apply inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold
+           bg-accent-violet/15 border border-accent-violet/50 text-accent-violet
+           cursor-pointer select-none;
   }
 
   .tag-inactive {
-    @apply inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium
+    @apply inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium
            bg-bg-elevated border border-bg-border text-text-secondary
-           hover:border-text-muted hover:text-text-primary cursor-pointer select-none transition-colors;
+           hover:border-text-muted hover:text-text-primary
+           cursor-pointer select-none transition-colors;
+  }
+
+  /* Logo block — squared violet with letter mark */
+  .logo-mark {
+    @apply w-7 h-7 rounded-md bg-accent-violet flex items-center justify-center
+           text-white font-bold text-sm shadow-glow-violet;
   }
 }
 
@@ -76,13 +104,15 @@ body {
 }
 
 .shimmer {
-  background: linear-gradient(90deg, transparent 25%, rgba(212,175,55,0.05) 50%, transparent 75%);
+  background: linear-gradient(90deg, transparent 25%, rgba(168, 85, 247, 0.06) 50%, transparent 75%);
   background-size: 200% 100%;
   animation: shimmer 2s linear infinite;
 }
 
-.result-content h2 { @apply text-accent-gold font-semibold text-base mt-4 mb-2; }
-.result-content h3 { @apply text-accent-gold font-semibold text-sm mt-3 mb-1; }
+/* Result content (markdown output) */
+.result-content h1 { @apply text-text-primary font-bold text-lg mt-4 mb-2; }
+.result-content h2 { @apply text-accent-violet font-semibold text-base mt-4 mb-2; }
+.result-content h3 { @apply text-accent-violet font-semibold text-sm mt-3 mb-1; }
 .result-content strong { @apply text-text-primary font-semibold; }
 .result-content ul { @apply list-disc pl-5 space-y-1; }
 .result-content ol { @apply list-decimal pl-5 space-y-1; }
@@ -90,3 +120,4 @@ body {
 .result-content p { @apply text-text-secondary text-sm mb-2 leading-relaxed; }
 .result-content hr { @apply border-bg-border my-4; }
 .result-content em { @apply text-text-muted italic text-xs; }
+.result-content a { @apply text-accent-violet underline-offset-2 hover:underline; }

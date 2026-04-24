@@ -53,13 +53,26 @@ export default function HomePage() {
       <Sidebar />
 
       <main className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-6 py-8">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-8">
+        <div className="max-w-5xl mx-auto px-8 py-12">
+          {/* Hero */}
+          <div className="mb-10">
+            <p className="text-accent-violet text-xs font-semibold uppercase tracking-widest mb-3">
+              ● Creative engine
+            </p>
+            <h1 className="text-text-primary text-5xl md:text-6xl font-bold tracking-tight leading-[1.05]">
+              Génère des creas qui <span className="text-accent-violet">scalent.</span>
+            </h1>
+            <p className="text-text-secondary text-base md:text-lg mt-4 max-w-2xl leading-relaxed">
+              Nano Banana prompts, scripts vidéo, hooks, itérations sur tes winners — tout ton pipeline créatif Meta Ads, mis à jour en continu avec ta brand knowledge.
+            </p>
+          </div>
+
+          {/* Header with create */}
+          <div className="flex items-center justify-between mb-6">
             <div>
-              <h1 className="text-text-primary text-2xl font-semibold">Brand Projects</h1>
-              <p className="text-text-secondary text-sm mt-1">
-                Create a project per brand — docs, ads, scripts, and generations stay together.
+              <h2 className="text-text-primary text-xl font-semibold">Brand projects</h2>
+              <p className="text-text-muted text-sm mt-0.5">
+                Une project par marque — docs, ads, scripts et générations restent groupés.
               </p>
             </div>
             <button onClick={() => setShowForm(true)} className="btn-primary">
@@ -88,7 +101,7 @@ export default function HomePage() {
             </div>
           )}
 
-          {/* Projects grid */}
+          {/* Projects */}
           {loading ? (
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (
@@ -96,9 +109,9 @@ export default function HomePage() {
               ))}
             </div>
           ) : projects.length === 0 ? (
-            <div className="card p-12 text-center">
-              <p className="text-text-muted text-4xl mb-4">◈</p>
-              <p className="text-text-secondary">No brand projects yet.</p>
+            <div className="card p-16 text-center">
+              <div className="logo-mark mx-auto mb-4 w-12 h-12 text-xl">C</div>
+              <p className="text-text-primary font-medium">No brand projects yet</p>
               <p className="text-text-muted text-sm mt-1">Create your first project to get started.</p>
             </div>
           ) : (
@@ -106,12 +119,12 @@ export default function HomePage() {
               {projects.map((project) => (
                 <div
                   key={project.id}
-                  className="card px-5 py-4 flex items-center justify-between hover:border-bg-hover transition-colors group"
+                  className="card px-5 py-4 flex items-center justify-between hover:border-accent-violet/30 transition-colors group"
                 >
                   <Link href={`/projects/${project.id}`} className="flex-1 min-w-0">
-                    <h2 className="text-text-primary font-medium text-sm group-hover:text-accent-gold transition-colors">
+                    <h3 className="text-text-primary font-semibold text-sm group-hover:text-accent-violet transition-colors">
                       {project.name}
-                    </h2>
+                    </h3>
                     <div className="flex gap-4 mt-1">
                       <span className="text-text-muted text-xs">
                         {project._count.documents} doc{project._count.documents !== 1 ? 's' : ''}
