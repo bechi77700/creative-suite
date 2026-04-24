@@ -63,6 +63,27 @@ export default function PromptImageGenerator({
 
   const currentModel = IMAGE_MODELS.find((m) => m.value === model)!;
 
+  const urlToBase64 = async (url: string): Promise<{ base64: string; mimeType: string } | null> => {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const mimeType = blob.type || 'image/png';
+      const base64: string = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result as string;
+          // strip "data:<mime>;base64," prefix
+          resolve(result.split(',')[1] || '');
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      return { base64, mimeType };
+    } catch {
+      return null;
+    }
+  };
+
   const generate = async (withFeedback = false) => {
     if (currentModel.needsRef && refs.length === 0) {
       setError('This model requires a reference image — please upload one above.');
@@ -72,9 +93,22 @@ export default function PromptImageGenerator({
     setLoading(true);
     setError('');
 
-    const sendRefs = currentModel.allowsRef
-      ? refs.map((r) => ({ base64: r.base64, mimeType: r.mimeType }))
-      : [];
+    // When regenerating with feedback AND the model supports refs, use the
+    // previously generated image as the primary reference so the model
+    // *edits* it instead of starting from scratch. The product refs were
+    // already baked into the previous image — no need to send them again.
+    let sendRefs: Array<{ base64: string; mimeType: string }> = [];
+    if (withFeedback && imageUrl && currentModel.allowsRef) {
+      const prev = await urlToBase64(imageUrl);
+      if (prev) {
+        sendRefs = [prev];
+      } else {
+        // Couldn't fetch the previous image — fall back to original refs
+        sendRefs = refs.map((r) => ({ base64: r.base64, mimeType: r.mimeType }));
+      }
+    } else if (currentModel.allowsRef) {
+      sendRefs = refs.map((r) => ({ base64: r.base64, mimeType: r.mimeType }));
+    }
 
     try {
       const res = await fetch('/api/generate/image', {
@@ -213,19 +247,23 @@ export default function PromptImageGenerator({
 
           <div>
             <label className="text-text-muted text-[10px] uppercase tracking-widest block mb-1">
-              What's wrong? (optional — improves regeneration)
+              {currentModel.allowsRef
+                ? "What to change on this image? (edits the image above)"
+                : "What's wrong? (regenerates from scratch — model doesn't support image edit)"}
             </label>
             <textarea
               className="input-field resize-none text-xs"
               rows={2}
-              placeholder="e.g. text is unreadable, wrong product color, too dark…"
+              placeholder="e.g. change the background to beige, make the text bigger, remove the logo top-right…"
               value={feedback}
               onChange={(e) => setFeedback(e.target.value)}
             />
           </div>
 
           <button onClick={() => generate(true)} className="btn-primary w-full text-xs">
-            Regenerate {feedback.trim() ? 'with feedback' : ''}
+            {currentModel.allowsRef
+              ? feedback.trim() ? 'Edit this image with feedback' : 'Regenerate'
+              : feedback.trim() ? 'Regenerate with feedback' : 'Regenerate'}
           </button>
         </div>
       )}
