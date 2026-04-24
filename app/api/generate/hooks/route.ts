@@ -5,6 +5,11 @@ import { getAnthropic, MODEL, GENERATION_RULES } from '@/lib/anthropic';
 export async function POST(req: Request) {
   const body = await req.json();
   const { projectId, mode, script, instructions } = body;
+  // Clamp count to a sane range; default to 12 for backward compat.
+  const requestedCount = Number(body.count);
+  const count = Number.isFinite(requestedCount)
+    ? Math.min(48, Math.max(1, Math.round(requestedCount)))
+    : 12;
 
   const project = await prisma.brandProject.findUnique({
     where: { id: projectId },
@@ -36,7 +41,7 @@ BRAND DOCS: ${brandContext || '(none)'}
 
 ${modeSection}${instructionsSection}
 
-Generate 12 diverse hook ideas for Meta Ads cold traffic. Mix of:
+Generate ${count} diverse hook ideas for Meta Ads cold traffic. Mix of:
 - Written hooks (on-screen text / spoken opening lines)
 - Visual hook ideas (what the camera shows in the first 2 seconds)
 
@@ -58,9 +63,12 @@ Why it works: [one line psychological explanation]
 
 No preamble. Start directly with Hook #1.`;
 
+  // ~200 tokens per hook is a generous budget for the structured output above.
+  const maxTokens = Math.min(8000, Math.max(1500, count * 220));
+
   const response = await getAnthropic().messages.create({
     model: MODEL,
-    max_tokens: 2500,
+    max_tokens: maxTokens,
     messages: [{ role: 'user', content: prompt }],
   });
 

@@ -10,6 +10,13 @@ import { parseSSE, extractClosedCodeBlocks } from '@/lib/streaming';
 // image forwarded so it's faithful to the source).
 const IMAGE_MODEL = 'nano-banana-2';
 
+// Stable short hash for prompt → assetKey suffix (Winners library).
+function hashIterPrompt(s: string): string {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return Math.abs(h).toString(36);
+}
+
 export const ITERATION_STRATEGIES = [
   { value: 'hook', label: 'Hook variation', desc: 'Same visual, new headlines' },
   { value: 'format', label: 'Format swap', desc: 'Same message, new layout' },
@@ -462,6 +469,10 @@ export default function IteratePanel({
                               initialImages={productRefImages.length > 0 ? productRefImages : refs}
                               initialModel={IMAGE_MODEL}
                               autoGenerateImageUrl={imgState.url}
+                              projectId={projectId}
+                              assetType="iterate"
+                              assetKeySuffix={`${run.id}-${hashIterPrompt(promptText)}`}
+                              winnerMeta={{ strategies: run.strategiesUsed }}
                             />
                           )}
                           {!imgState && !run.loading && (
@@ -470,6 +481,10 @@ export default function IteratePanel({
                               prompt={promptText}
                               initialImages={productRefImages.length > 0 ? productRefImages : refs}
                               initialModel={IMAGE_MODEL}
+                              projectId={projectId}
+                              assetType="iterate"
+                              assetKeySuffix={`${run.id}-${hashIterPrompt(promptText)}`}
+                              winnerMeta={{ strategies: run.strategiesUsed }}
                             />
                           )}
                         </div>

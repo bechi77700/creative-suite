@@ -1,9 +1,42 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Sidebar from '@/components/Sidebar';
 import SaintGraalGate from '@/components/SaintGraalGate';
 import ReactMarkdown from 'react-markdown';
+import { addWinner, removeWinner } from '@/lib/winners';
+
+// Parse the angles markdown returned by /api/generate/video-angles into
+// individual angle blocks (one per checkbox). Each block looks like:
+//   **1. ANGLE NAME**
+//   - Core idea: ...
+//   - Why it works: ...
+//   - Hook preview: ...
+function parseAngles(md: string): Array<{ id: string; title: string; body: string; full: string }> {
+  if (!md) return [];
+  const lines = md.split('\n');
+  const blocks: string[] = [];
+  let current: string[] = [];
+  for (const line of lines) {
+    const isHeader = /^\*\*\d+\./.test(line.trim());
+    if (isHeader && current.length > 0) {
+      blocks.push(current.join('\n').trim());
+      current = [line];
+    } else {
+      current.push(line);
+    }
+  }
+  if (current.length > 0) blocks.push(current.join('\n').trim());
+
+  return blocks
+    .filter((b) => /^\*\*\d+\./.test(b.trim()))
+    .map((b, i) => {
+      const titleMatch = b.match(/^\*\*\d+\.\s*(.+?)\*\*/);
+      const title = titleMatch ? titleMatch[1].trim() : `Angle ${i + 1}`;
+      const body = b.replace(/^\*\*\d+\..+?\*\*\s*\n?/, '').trim();
+      return { id: `a-${i}`, title, body, full: b };
+    });
+}
 
 const VIDEO_FORMATS = [
   'UGC face cam',
@@ -36,6 +69,8 @@ interface ScriptRun {
   variationsLoading: boolean;
   loading: boolean;
   error: string;
+  feedback: string;
+  refining: boolean;
 }
 
 export default function VideoScriptPage({ params }: { params: { id: string } }) {
@@ -50,6 +85,22 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
   const [anglesLoading, setAnglesLoading] = useState(false);
   const [selectedAngle, setSelectedAngle] = useState('');
   const [additionalContext, setAdditionalContext] = useState('');
+  const [checkedAngleIds, setCheckedAngleIds] = useState<Set<string>>(new Set());
+
+  const parsedAngles = useMemo(() => parseAngles(angles), [angles]);
+
+  const toggleAngleCheck = (angleId: string) => {
+    const next = new Set(checkedAngleIds);
+    if (next.has(angleId)) next.delete(angleId);
+    else next.add(angleId);
+    setCheckedAngleIds(next);
+    // Rebuild step-3 textarea from currently-checked angles, in original order.
+    const text = parsedAngles
+      .filter((a) => next.has(a.id))
+      .map((a) => a.full)
+      .join('\n\n');
+    setSelectedAngle(text);
+  };
 
   const [runs, setRuns] = useState<ScriptRun[]>([]);
 
@@ -69,6 +120,7 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
     setAnglesLoading(true);
     setAngles('');
     setSelectedAngle('');
+    setCheckedAngleIds(new Set());
     const res = await fetch('/api/generate/video-angles', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -94,6 +146,8 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
       variationsLoading: false,
       loading: true,
       error: '',
+      feedback: '',
+      refining: false,
     };
     setRuns((prev) => [newRun, ...prev]);
 
@@ -126,9 +180,63 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
   };
 
   const toggleWinner = async (runId: string, generationId: string) => {
-    const res = await fetch(`/api/history/${generationId}/winner`, { method: 'PATCH' });
-    const data = await res.json();
-    updateRun(runId, { isWinner: data.isWinner });
+    const run = runs.find((r) => r.id === runId);
+    if (!run) return;
+    // Optimistic flip — also save to per-asset Winners library so the script
+    // shows up there. assetKey 'full' = the whole script (one per generation).
+    const next = !run.isWinner;
+    updateRun(runId, { isWinner: next });
+    if (next) {
+      await addWinner({
+        projectId: id,
+        generationId,
+        assetType: 'video_script',
+        assetKey: 'full',
+        content: run.output,
+        meta: { format: run.format, length: run.length },
+      });
+    } else {
+      await removeWinner(generationId, 'full');
+    }
+    // Keep the legacy batch flag in sync for the existing History UI.
+    fetch(`/api/history/${generationId}/winner`, { method: 'PATCH' }).catch(() => undefined);
+  };
+
+  const refineRun = async (runId: string) => {
+    const run = runs.find((r) => r.id === runId);
+    if (!run || !run.feedback.trim() || !run.output) return;
+    updateRun(runId, { refining: true });
+    try {
+      const res = await fetch('/api/generate/video-script', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: id,
+          format: run.format,
+          length: run.length,
+          angle: selectedAngle || '(see previous script)',
+          additionalContext,
+          previousOutput: run.output,
+          feedback: run.feedback,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        updateRun(runId, { refining: false });
+        return;
+      }
+      updateRun(runId, {
+        output: data.output,
+        generationId: data.generationId,
+        feedback: '',
+        refining: false,
+        // Reset winner flag — the user is looking at a brand-new script body now.
+        isWinner: false,
+        variationsOutput: '',
+      });
+    } catch {
+      updateRun(runId, { refining: false });
+    }
   };
 
   const getVariations = async (runId: string, generationId: string) => {
@@ -299,13 +407,67 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
 
           {angles && !anglesLoading && (
             <div className="card">
-              <div className="px-4 py-3 border-b border-bg-border">
-                <span className="text-text-muted text-xs uppercase tracking-widest">Angle Proposals</span>
-                <p className="text-text-muted text-xs mt-0.5">Pick one and paste it in Step 3, or request new ones.</p>
+              <div className="px-4 py-3 border-b border-bg-border flex items-center justify-between">
+                <div>
+                  <span className="text-text-muted text-xs uppercase tracking-widest">Angle Proposals</span>
+                  <p className="text-text-muted text-xs mt-0.5">
+                    Check the angle(s) you want — they fill Step 3 automatically.
+                    {checkedAngleIds.size > 0 && ` · ${checkedAngleIds.size} selected`}
+                  </p>
+                </div>
+                {checkedAngleIds.size > 0 && (
+                  <button
+                    onClick={() => { setCheckedAngleIds(new Set()); setSelectedAngle(''); }}
+                    className="text-text-muted hover:text-text-primary text-[10px] uppercase tracking-widest"
+                  >
+                    Clear selection
+                  </button>
+                )}
               </div>
-              <div className="p-5 result-content">
-                <ReactMarkdown>{angles}</ReactMarkdown>
-              </div>
+              {parsedAngles.length === 0 ? (
+                // Fallback: couldn't parse — render the raw markdown like before
+                <div className="p-5 result-content">
+                  <ReactMarkdown>{angles}</ReactMarkdown>
+                </div>
+              ) : (
+                <div className="p-3 space-y-2">
+                  {parsedAngles.map((a) => {
+                    const checked = checkedAngleIds.has(a.id);
+                    return (
+                      <button
+                        key={a.id}
+                        type="button"
+                        onClick={() => toggleAngleCheck(a.id)}
+                        className={`w-full text-left rounded-lg border px-4 py-3 transition-colors ${
+                          checked
+                            ? 'bg-accent-violet/10 border-accent-violet/50'
+                            : 'bg-bg-base/40 border-bg-border hover:border-text-muted'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <span
+                            className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center text-[10px] font-bold ${
+                              checked
+                                ? 'bg-accent-violet border-accent-violet text-white'
+                                : 'border-bg-border text-transparent'
+                            }`}
+                          >
+                            ✓
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-semibold ${checked ? 'text-accent-violet' : 'text-text-primary'}`}>
+                              {a.title}
+                            </p>
+                            <div className="result-content mt-1.5 [&_p]:mb-0 [&_li]:text-xs">
+                              <ReactMarkdown>{a.body}</ReactMarkdown>
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -377,6 +539,28 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
                     </div>
                     <div className="p-5 result-content">
                       <ReactMarkdown>{run.output}</ReactMarkdown>
+                    </div>
+
+                    {/* Refine with feedback */}
+                    <div className="border-t border-bg-border px-4 py-3 bg-bg-base/30">
+                      <label className="text-text-muted text-[10px] uppercase tracking-widest block mb-1.5">
+                        Refine this script with feedback
+                      </label>
+                      <textarea
+                        className="input-field resize-none text-xs"
+                        rows={2}
+                        placeholder="e.g. shorter intro, sharper CTA, swap the second beat for a testimonial, more punchy hook…"
+                        value={run.feedback}
+                        onChange={(e) => updateRun(run.id, { feedback: e.target.value })}
+                        disabled={run.refining}
+                      />
+                      <button
+                        onClick={() => refineRun(run.id)}
+                        disabled={run.refining || !run.feedback.trim()}
+                        className="btn-primary text-xs mt-2"
+                      >
+                        {run.refining ? 'Rewriting…' : 'Regenerate with feedback'}
+                      </button>
                     </div>
                   </div>
 

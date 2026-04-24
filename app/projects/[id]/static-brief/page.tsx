@@ -35,6 +35,16 @@ interface Run {
 }
 
 // Parse all CLOSED triple-backtick code blocks from a (possibly partial) markdown string.
+// Stable short hash of a string — used to derive a Winners assetKey from
+// the prompt text without collisions (within a single generation).
+function hashString(s: string): string {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (h * 31 + s.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h).toString(36);
+}
+
 function extractClosedCodeBlocks(text: string): string[] {
   const regex = /```[a-zA-Z0-9_-]*\n([\s\S]*?)```/g;
   const out: string[] = [];
@@ -733,6 +743,11 @@ function RunCard({
                                   prompt={promptText}
                                   initialImages={initialImagesForChild}
                                   initialModel={run.imageModel}
+                                  projectId={id}
+                                  generationId={run.generationId || undefined}
+                                  assetType="static"
+                                  assetKeySuffix={hashString(promptText)}
+                                  winnerMeta={{ product: run.product, mode: run.mode }}
                                 />
                               </div>
                             )}
@@ -743,6 +758,11 @@ function RunCard({
                                 initialImages={initialImagesForChild}
                                 initialModel={run.imageModel}
                                 autoGenerateImageUrl={imgState.url}
+                                projectId={id}
+                                generationId={run.generationId || undefined}
+                                assetType="static"
+                                assetKeySuffix={hashString(promptText)}
+                                winnerMeta={{ product: run.product, mode: run.mode }}
                               />
                             )}
                             {!imgState && !run.loading && (
@@ -751,6 +771,11 @@ function RunCard({
                                 prompt={promptText}
                                 initialImages={initialImagesForChild}
                                 initialModel={run.imageModel}
+                                projectId={id}
+                                generationId={run.generationId || undefined}
+                                assetType="static"
+                                assetKeySuffix={hashString(promptText)}
+                                winnerMeta={{ product: run.product, mode: run.mode }}
                               />
                             )}
                           </div>

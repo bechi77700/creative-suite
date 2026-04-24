@@ -5,7 +5,7 @@ import { getAnthropic, MODEL, GENERATION_RULES } from '@/lib/anthropic';
 export async function POST(req: Request) {
   try {
   const body = await req.json();
-  const { projectId, format, length, angle, additionalContext } = body;
+  const { projectId, format, length, angle, additionalContext, previousOutput, feedback } = body;
 
   const project = await prisma.brandProject.findUnique({
     where: { id: projectId },
@@ -22,6 +22,26 @@ export async function POST(req: Request) {
 
   const wordCount = getApproxWordCount(length);
 
+  const refineSection = previousOutput && feedback?.trim()
+    ? `
+
+─────────────────────────────────────────────
+REFINEMENT MODE
+─────────────────────────────────────────────
+You already wrote the script below. Rewrite it applying the user's feedback.
+Keep the same hook → body → CTA structure. Keep what works. Only change what
+the feedback explicitly asks for, plus surrounding lines that need to flow.
+
+PREVIOUS SCRIPT:
+${previousOutput}
+
+USER FEEDBACK (apply these corrections):
+${feedback}
+
+Output the FULL rewritten script in the same OUTPUT FORMAT below. Do not
+prepend any commentary about what changed.`
+    : '';
+
   const prompt = `${GENERATION_RULES}
 
 BRAND: ${project.name}
@@ -32,6 +52,7 @@ VIDEO FORMAT: ${format}
 TARGET LENGTH: ${length} (~${wordCount} words of spoken script)
 ANGLE: ${angle}
 ${additionalContext ? `ADDITIONAL CONTEXT: ${additionalContext}` : ''}
+${refineSection}
 
 Write a complete, ready-to-shoot video ad script.
 

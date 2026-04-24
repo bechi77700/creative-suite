@@ -15,6 +15,7 @@ model BrandProject {
 
   documents   BrandDocument[]
   generations Generation[]
+  winners     Winner[]
 }
 
 model BrandDocument {
@@ -48,4 +49,33 @@ model Generation {
   output    String
   isWinner  Boolean  @default(false)
   createdAt DateTime @default(now())
+
+  winners   Winner[]
+}
+
+// Per-asset winner: one row = one hook line, one script, one static image,
+// one video iteration, etc. (vs Generation.isWinner which marks the whole batch).
+model Winner {
+  id           String   @id @default(cuid())
+  projectId    String
+  project      BrandProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  generationId String?
+  generation   Generation?  @relation(fields: [generationId], references: [id], onDelete: SetNull)
+
+  // 'hook' | 'video_script' | 'static' | 'iterate'
+  assetType    String
+  // Stable identifier inside the parent generation (hook index, image url, etc.)
+  // Used to dedupe: a (generationId, assetKey) pair can only have one Winner row.
+  assetKey     String
+  // Plain-text or markdown content of the asset (for hooks/scripts).
+  content      String
+  // Optional image url (for static / iterate winners).
+  imageUrl     String?
+  // Free-form metadata as JSON (format/length/mode/etc.) for display.
+  meta         String?
+
+  createdAt    DateTime @default(now())
+
+  @@unique([generationId, assetKey])
+  @@index([projectId, assetType])
 }
