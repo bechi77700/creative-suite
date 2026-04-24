@@ -56,13 +56,13 @@ export default function HomePage() {
         <div className="max-w-5xl mx-auto px-8 py-12">
           {/* Hero */}
           <div className="mb-10">
-            <p className="text-accent-violet text-xs font-semibold uppercase tracking-widest mb-3">
+            <p className="text-accent-violet text-sm font-semibold uppercase tracking-widest mb-3">
               ● Creative engine
             </p>
             <h1 className="text-text-primary text-5xl md:text-6xl font-bold tracking-tight leading-[1.05]">
               Génère des creas qui <span className="text-accent-violet">scalent.</span>
             </h1>
-            <p className="text-text-secondary text-base md:text-lg mt-4 max-w-2xl leading-relaxed">
+            <p className="text-text-secondary text-lg md:text-xl mt-5 max-w-2xl leading-relaxed">
               Nano Banana prompts, scripts vidéo, hooks, itérations sur tes winners — tout ton pipeline créatif Meta Ads, mis à jour en continu avec ta brand knowledge.
             </p>
           </div>
@@ -70,8 +70,8 @@ export default function HomePage() {
           {/* Header with create */}
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h2 className="text-text-primary text-xl font-semibold">Brand projects</h2>
-              <p className="text-text-muted text-sm mt-0.5">
+              <h2 className="text-text-primary text-2xl font-semibold">Brand projects</h2>
+              <p className="text-text-muted text-base mt-1">
                 Une project par marque — docs, ads, scripts et générations restent groupés.
               </p>
             </div>
@@ -122,30 +122,30 @@ export default function HomePage() {
                   className="card px-5 py-4 flex items-center justify-between hover:border-accent-violet/30 transition-colors group"
                 >
                   <Link href={`/projects/${project.id}`} className="flex-1 min-w-0">
-                    <h3 className="text-text-primary font-semibold text-sm group-hover:text-accent-violet transition-colors">
+                    <h3 className="text-text-primary font-semibold text-base group-hover:text-accent-violet transition-colors">
                       {project.name}
                     </h3>
-                    <div className="flex gap-4 mt-1">
-                      <span className="text-text-muted text-xs">
+                    <div className="flex gap-4 mt-1.5">
+                      <span className="text-text-muted text-sm">
                         {project._count.documents} doc{project._count.documents !== 1 ? 's' : ''}
                       </span>
-                      <span className="text-text-muted text-xs">
+                      <span className="text-text-muted text-sm">
                         {project._count.generations} generation{project._count.generations !== 1 ? 's' : ''}
                       </span>
-                      <span className="text-text-muted text-xs">
+                      <span className="text-text-muted text-sm">
                         {new Date(project.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </span>
                     </div>
                   </Link>
 
                   <div className="flex items-center gap-2 ml-4">
-                    <Link href={`/projects/${project.id}/static-brief`} className="btn-secondary text-xs px-3 py-1.5">
+                    <Link href={`/projects/${project.id}/static-brief`} className="btn-secondary text-sm px-3 py-1.5">
                       Static Brief
                     </Link>
-                    <Link href={`/projects/${project.id}/video-script`} className="btn-secondary text-xs px-3 py-1.5">
+                    <Link href={`/projects/${project.id}/video-script`} className="btn-secondary text-sm px-3 py-1.5">
                       Video Script
                     </Link>
-                    <Link href={`/projects/${project.id}/hooks`} className="btn-secondary text-xs px-3 py-1.5">
+                    <Link href={`/projects/${project.id}/hooks`} className="btn-secondary text-sm px-3 py-1.5">
                       Hooks
                     </Link>
                     <button

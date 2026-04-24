@@ -18,7 +18,9 @@ html, body {
 body {
   background-color: #000000;
   color: #FAFAFA;
-  font-family: var(--font-sans), 'Inter', system-ui, sans-serif;
+  font-family: var(--font-geist-sans), 'Inter', system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   font-feature-settings: 'cv11', 'ss01';

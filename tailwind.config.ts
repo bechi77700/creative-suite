@@ -49,9 +49,9 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ['var(--font-sans)', 'Inter', 'system-ui', 'sans-serif'],
-        mono: ['var(--font-mono)', 'JetBrains Mono', 'monospace'],
-        display: ['var(--font-sans)', 'Inter', 'system-ui', 'sans-serif'],
+        sans: ['var(--font-geist-sans)', 'Inter', 'system-ui', 'sans-serif'],
+        mono: ['var(--font-geist-mono)', 'JetBrains Mono', 'monospace'],
+        display: ['var(--font-geist-sans)', 'Inter', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
         'glow-violet': '0 0 24px -4px rgba(168, 85, 247, 0.55), 0 0 48px -8px rgba(168, 85, 247, 0.25)',
