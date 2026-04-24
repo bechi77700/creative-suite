@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import PromptImageGenerator from './PromptImageGenerator';
-import { RefImage } from './MultiImageInput';
+import MultiImageInput, { RefImage } from './MultiImageInput';
 import { parseSSE, extractClosedCodeBlocks } from '@/lib/streaming';
 
 // Image iterations are always rendered with nano-banana-2 (with the ref
@@ -67,6 +67,13 @@ export default function IteratePanel({
       ? [initialImage]
       : [];
   const hasRefs = refs.length > 0;
+
+  // OPTIONAL extra product reference photos used ONLY for image generation
+  // (not for the Claude analysis step). Useful when the source ad shows the
+  // product from far away or partially, and Nano Banana struggles to
+  // reproduce it faithfully.
+  const [productRefImages, setProductRefImages] = useState<RefImage[]>([]);
+
   const [strategies, setStrategies] = useState<Set<string>>(new Set());
   const [otherInstructions, setOtherInstructions] = useState('');
   const [count, setCount] = useState('3');
@@ -102,8 +109,12 @@ export default function IteratePanel({
       imageStates: { ...r.imageStates, [promptText]: { status: 'generating' } },
     }));
 
-    const referenceImages = hasRefs
-      ? refs.map((r) => ({ base64: r.base64, mimeType: r.mimeType }))
+    // For image generation, prefer the user-supplied product references when
+    // provided (they reproduce the product more faithfully than the source
+    // ad). Otherwise fall back to the source refs.
+    const imageGenSourceRefs = productRefImages.length > 0 ? productRefImages : refs;
+    const referenceImages = imageGenSourceRefs.length > 0
+      ? imageGenSourceRefs.map((r) => ({ base64: r.base64, mimeType: r.mimeType }))
       : undefined;
 
     try {
@@ -320,6 +331,26 @@ export default function IteratePanel({
         </p>
       </div>
 
+      {/* Optional dedicated product reference photos for image generation */}
+      <div>
+        <label className="text-text-muted text-[10px] uppercase tracking-widest block mb-1">
+          Product reference photo(s)
+          <span className="text-text-muted ml-1 normal-case">— optional, used only for image generation when the source ad doesn&apos;t show the product clearly</span>
+        </label>
+        <MultiImageInput
+          images={productRefImages}
+          onChange={setProductRefImages}
+          max={6}
+          compact
+          emptyLabel="↑ Upload product photo(s)"
+        />
+        {productRefImages.length > 0 && (
+          <p className="text-text-muted text-[10px] mt-1">
+            Nano Banana will use {productRefImages.length === 1 ? 'this photo' : `these ${productRefImages.length} photos`} as the product reference instead of the source ad.
+          </p>
+        )}
+      </div>
+
       <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer select-none">
         <input
           type="checkbox"
@@ -428,7 +459,7 @@ export default function IteratePanel({
                             <PromptImageGenerator
                               key={`${promptText}-done`}
                               prompt={promptText}
-                              initialImages={refs}
+                              initialImages={productRefImages.length > 0 ? productRefImages : refs}
                               initialModel={IMAGE_MODEL}
                               autoGenerateImageUrl={imgState.url}
                             />
@@ -437,7 +468,7 @@ export default function IteratePanel({
                             <PromptImageGenerator
                               key={`${promptText}-manual`}
                               prompt={promptText}
-                              initialImages={refs}
+                              initialImages={productRefImages.length > 0 ? productRefImages : refs}
                               initialModel={IMAGE_MODEL}
                             />
                           )}
