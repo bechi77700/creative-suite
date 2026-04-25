@@ -70,8 +70,8 @@ export default function KnowledgePage() {
     <div className="flex h-screen bg-bg-base overflow-hidden">
       <Sidebar />
 
-      <main className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto px-6 py-8">
+      <main className="flex-1 overflow-y-auto pt-12 md:pt-0">
+        <div className="max-w-3xl mx-auto px-4 py-6 md:px-6 md:py-8">
           <div className="mb-8">
             <h1 className="text-text-primary text-2xl font-semibold">Global Knowledge Base</h1>
             <p className="text-text-secondary text-sm mt-1">

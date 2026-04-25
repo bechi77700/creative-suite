@@ -153,9 +153,9 @@ export default function HookGeneratorPage({ params }: { params: { id: string } }
       {hasSaintGraal === false ? (
         <SaintGraalGate projectId={id} />
       ) : (
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden pt-12 md:pt-0">
         {/* Left: Form */}
-        <div className="w-80 border-r border-bg-border overflow-y-auto bg-bg-elevated flex flex-col">
+        <div className="w-full md:w-80 md:max-h-none max-h-[55vh] md:flex-shrink-0 border-b md:border-b-0 md:border-r border-bg-border overflow-y-auto bg-bg-elevated flex flex-col">
           <div className="px-5 py-5 border-b border-bg-border">
             <h1 className="text-text-primary font-semibold text-base">Hook Generator</h1>
             <p className="text-text-secondary text-xs mt-1">Scroll-stopping hooks — written + visual</p>

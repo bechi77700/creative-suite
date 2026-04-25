@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 interface NavItem {
   href: string;
@@ -97,9 +98,59 @@ function Badge({ text, tone }: { text: string; tone: 'new' | 'soon' }) {
 
 export default function Sidebar({ projectId, projectName }: SidebarProps) {
   const pathname = usePathname();
+  // Mobile drawer open/close. On desktop (>= md) the sidebar is always visible.
+  const [open, setOpen] = useState(false);
+
+  // Close the drawer whenever the route changes (so tapping a nav link feels right).
+  useEffect(() => { setOpen(false); }, [pathname]);
+
+  // Lock background scroll while the drawer is open.
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
 
   return (
-    <aside className="w-60 bg-bg-elevated border-r border-bg-border flex flex-col h-screen flex-shrink-0">
+    <>
+      {/* Mobile top bar — always visible on small screens. The hamburger
+          opens the drawer; the logo links home. */}
+      <div className="md:hidden fixed top-0 inset-x-0 z-30 h-12 bg-bg-elevated/95 backdrop-blur border-b border-bg-border flex items-center justify-between px-3">
+        <button
+          onClick={() => setOpen(true)}
+          aria-label="Open menu"
+          className="w-9 h-9 rounded-lg flex items-center justify-center text-text-primary hover:bg-bg-hover transition-colors"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-5 h-5">
+            <path d="M3 6h18M3 12h18M3 18h18" />
+          </svg>
+        </button>
+        <Link href="/" className="flex items-center gap-2">
+          <div className="logo-mark w-6 h-6 text-xs">C</div>
+          <span className="text-text-primary font-semibold text-sm tracking-tight">Creative Suite</span>
+        </Link>
+        <span className="w-9" />
+      </div>
+
+      {/* Mobile backdrop */}
+      {open && (
+        <div
+          onClick={() => setOpen(false)}
+          className="md:hidden fixed inset-0 z-40 bg-black/70 backdrop-blur-sm"
+          aria-hidden
+        />
+      )}
+
+      <aside
+        className={`
+          ${open ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0
+          fixed md:relative inset-y-0 left-0 z-50
+          w-64 md:w-60 bg-bg-elevated border-r border-bg-border
+          flex flex-col h-screen flex-shrink-0
+          transition-transform duration-200 ease-out
+        `}
+      >
       {/* Logo */}
       <div className="px-4 py-5 border-b border-bg-border flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2.5 group">
@@ -108,6 +159,16 @@ export default function Sidebar({ projectId, projectName }: SidebarProps) {
             Creative Suite
           </span>
         </Link>
+        {/* Close button — mobile only */}
+        <button
+          onClick={() => setOpen(false)}
+          aria-label="Close menu"
+          className="md:hidden w-8 h-8 rounded-md flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-4 h-4">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
       </div>
 
       {/* Scrollable nav area */}
@@ -162,7 +223,8 @@ export default function Sidebar({ projectId, projectName }: SidebarProps) {
       <div className="px-4 py-3 border-t border-bg-border">
         <p className="text-text-muted text-[10px] uppercase tracking-widest">US Market · Meta Ads</p>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }
 

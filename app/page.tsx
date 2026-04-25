@@ -52,8 +52,8 @@ export default function HomePage() {
     <div className="flex h-screen bg-bg-base overflow-hidden">
       <Sidebar />
 
-      <main className="flex-1 overflow-y-auto">
-        <div className="max-w-5xl mx-auto px-8 py-12">
+      <main className="flex-1 overflow-y-auto pt-12 md:pt-0">
+        <div className="max-w-5xl mx-auto px-4 py-6 md:px-8 md:py-12">
           {/* Hero */}
           <div className="mb-10">
             <p className="text-accent-violet text-sm font-semibold uppercase tracking-widest mb-3">
@@ -68,14 +68,14 @@ export default function HomePage() {
           </div>
 
           {/* Header with create */}
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
             <div>
               <h2 className="text-text-primary text-2xl font-semibold">Brand projects</h2>
               <p className="text-text-muted text-base mt-1">
                 Une project par marque — docs, ads, scripts et générations restent groupés.
               </p>
             </div>
-            <button onClick={() => setShowForm(true)} className="btn-primary">
+            <button onClick={() => setShowForm(true)} className="btn-primary self-start sm:self-auto">
               + New Project
             </button>
           </div>
@@ -83,7 +83,7 @@ export default function HomePage() {
           {/* Create form */}
           {showForm && (
             <div className="card p-4 mb-6 animate-fade-in">
-              <form onSubmit={createProject} className="flex gap-3">
+              <form onSubmit={createProject} className="flex flex-col sm:flex-row gap-3">
                 <input
                   className="input-field flex-1"
                   placeholder="Brand name (e.g. EverHaar, Eloria, Garden & Gather)"
@@ -119,13 +119,13 @@ export default function HomePage() {
               {projects.map((project) => (
                 <div
                   key={project.id}
-                  className="card px-5 py-4 flex items-center justify-between hover:border-accent-violet/30 transition-colors group"
+                  className="card px-4 py-4 md:px-5 flex flex-col md:flex-row md:items-center md:justify-between gap-3 hover:border-accent-violet/30 transition-colors group"
                 >
                   <Link href={`/projects/${project.id}`} className="flex-1 min-w-0">
                     <h3 className="text-text-primary font-semibold text-base group-hover:text-accent-violet transition-colors">
                       {project.name}
                     </h3>
-                    <div className="flex gap-4 mt-1.5">
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5">
                       <span className="text-text-muted text-sm">
                         {project._count.documents} doc{project._count.documents !== 1 ? 's' : ''}
                       </span>
@@ -138,7 +138,7 @@ export default function HomePage() {
                     </div>
                   </Link>
 
-                  <div className="flex items-center gap-2 ml-4">
+                  <div className="flex flex-wrap items-center gap-2 md:ml-4">
                     <Link href={`/projects/${project.id}/static-brief`} className="btn-secondary text-sm px-3 py-1.5">
                       Static Brief
                     </Link>
@@ -150,7 +150,7 @@ export default function HomePage() {
                     </Link>
                     <button
                       onClick={() => deleteProject(project.id)}
-                      className="btn-danger opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="btn-danger md:opacity-0 md:group-hover:opacity-100 transition-opacity"
                     >
                       Delete
                     </button>

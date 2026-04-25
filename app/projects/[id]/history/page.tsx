@@ -115,8 +115,8 @@ export default function HistoryPage({ params }: { params: { id: string } }) {
     <div className="flex h-screen bg-bg-base overflow-hidden">
       <Sidebar projectId={id} projectName={projectName} />
 
-      <main className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-6 py-8">
+      <main className="flex-1 overflow-y-auto pt-12 md:pt-0">
+        <div className="max-w-4xl mx-auto px-4 py-6 md:px-6 md:py-8">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h1 className="text-text-primary text-2xl font-semibold">Generation History</h1>

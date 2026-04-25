@@ -70,8 +70,8 @@ export default function WinnersPage({ params }: { params: { id: string } }) {
     <div className="flex h-screen bg-bg-base overflow-hidden">
       <Sidebar projectId={id} projectName={projectName} />
 
-      <main className="flex-1 overflow-y-auto">
-        <div className="max-w-6xl mx-auto px-8 py-10">
+      <main className="flex-1 overflow-y-auto pt-12 md:pt-0">
+        <div className="max-w-6xl mx-auto px-4 py-6 md:px-8 md:py-10">
           <div className="mb-8">
             <p className="text-accent-violet text-xs font-semibold uppercase tracking-widest mb-2">★ Library</p>
             <h1 className="text-text-primary text-3xl font-bold tracking-tight">Winners</h1>

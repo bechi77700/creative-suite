@@ -71,7 +71,7 @@ export default function IteratePage({ params }: { params: { id: string } }) {
     <div className="flex h-screen bg-bg-base overflow-hidden">
       <Sidebar projectId={id} projectName={projectName} />
 
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 overflow-y-auto p-4 md:p-8 pt-16 md:pt-8">
         <div className="max-w-4xl mx-auto space-y-6">
           <div>
             <h1 className="text-text-primary font-semibold text-xl">Iterate on a winner</h1>

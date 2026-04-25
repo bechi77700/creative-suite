@@ -328,10 +328,10 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
       {hasSaintGraal === false ? (
         <SaintGraalGate projectId={id} />
       ) : (
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden pt-12 md:pt-0">
 
         {/* ── Left panel ── */}
-        <div className="w-72 border-r border-bg-border bg-bg-elevated flex flex-col overflow-hidden">
+        <div className="w-full md:w-72 md:max-h-none max-h-[60vh] md:flex-shrink-0 border-b md:border-b-0 md:border-r border-bg-border bg-bg-elevated flex flex-col overflow-hidden">
 
           {/* Header */}
           <div className="px-5 py-5 border-b border-bg-border flex-shrink-0">
