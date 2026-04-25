@@ -34,6 +34,7 @@ export default function HookGeneratorPage({ params }: { params: { id: string } }
   const [count, setCount] = useState<HookCount>(6);
   const [script, setScript] = useState('');
   const [videoAnalysis, setVideoAnalysis] = useState<VideoAnalysis | null>(null);
+  const [videoSource, setVideoSource] = useState<'own' | 'competitor'>('competitor');
   const [instructions, setInstructions] = useState('');
   const [runs, setRuns] = useState<Run[]>([]);
 
@@ -69,7 +70,15 @@ export default function HookGeneratorPage({ params }: { params: { id: string } }
       const res = await fetch('/api/generate/hooks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: id, mode, count, script, instructions, videoAnalysis: mode === 'from_video' ? videoAnalysis : null }),
+        body: JSON.stringify({
+          projectId: id,
+          mode,
+          count,
+          script,
+          instructions,
+          videoAnalysis: mode === 'from_video' ? videoAnalysis : null,
+          videoSource: mode === 'from_video' ? videoSource : null,
+        }),
       });
       const data = await res.json();
       updateRun(runId, {
@@ -225,16 +234,49 @@ export default function HookGeneratorPage({ params }: { params: { id: string } }
             )}
 
             {mode === 'from_video' && (
-              <div>
-                <label className="text-text-muted text-xs mb-1.5 block">Reference Hook Video</label>
-                <VideoReferenceInput
-                  analysis={videoAnalysis}
-                  onChange={setVideoAnalysis}
-                  emptyLabel="↑ Upload a hook video (yours or competitor)"
-                />
-                <p className="text-text-muted text-[10px] mt-1.5 leading-relaxed">
-                  We clone the mechanism (curiosity gap, contrarian, stat shock…) and adapt the wording + visuals to your brand. Product, claims and noun-specifics are swapped.
-                </p>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-text-muted text-xs mb-1.5 block uppercase tracking-widest">Source</label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setVideoSource('own')}
+                      className={`px-2.5 py-2 rounded-md text-[11px] transition-colors border ${
+                        videoSource === 'own'
+                          ? 'bg-accent-violet/10 border-accent-violet/50 text-accent-violet'
+                          : 'border-bg-border text-text-secondary hover:text-text-primary hover:bg-bg-hover'
+                      }`}
+                    >
+                      <p className="font-semibold leading-tight">Own brand</p>
+                      <p className="text-text-muted text-[9px] mt-0.5 leading-snug">Iterate a winner — keep product & claims</p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVideoSource('competitor')}
+                      className={`px-2.5 py-2 rounded-md text-[11px] transition-colors border ${
+                        videoSource === 'competitor'
+                          ? 'bg-accent-violet/10 border-accent-violet/50 text-accent-violet'
+                          : 'border-bg-border text-text-secondary hover:text-text-primary hover:bg-bg-hover'
+                      }`}
+                    >
+                      <p className="font-semibold leading-tight">Competitor</p>
+                      <p className="text-text-muted text-[9px] mt-0.5 leading-snug">Clone mechanism — swap product & claims</p>
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-text-muted text-xs mb-1.5 block">Reference Hook Video</label>
+                  <VideoReferenceInput
+                    analysis={videoAnalysis}
+                    onChange={setVideoAnalysis}
+                    emptyLabel="↑ Upload a hook video"
+                  />
+                  <p className="text-text-muted text-[10px] mt-1.5 leading-relaxed">
+                    {videoSource === 'own'
+                      ? 'Same product, same claims, fresh executions. Mechanism stays, wording / visuals are multiplied.'
+                      : 'Mechanism is cloned (the WHY it stops the scroll). Product, claims and vertical-specific words are swapped to match your brand.'}
+                  </p>
+                </div>
               </div>
             )}
 
