@@ -56,8 +56,30 @@ export default function VideoReferenceInput({
         body: fd,
         signal: controller.signal,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      // Read text first so we can give a useful error if the body is empty
+      // (Railway proxy timeout / container restart mid-request return an
+      // empty body, which would otherwise blow up at JSON.parse with a
+      // useless "Unexpected end of JSON input").
+      const raw = await res.text();
+      if (!raw.trim()) {
+        throw new Error(
+          res.ok
+            ? 'Server returned an empty response — the request was likely killed by the platform before completing. Try again, or use a shorter clip.'
+            : `Server returned empty response (HTTP ${res.status}). This usually means the platform proxy timed out — try again or use a shorter clip.`,
+        );
+      }
+      let data: unknown;
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        throw new Error(
+          `Server returned non-JSON response (HTTP ${res.status}): ${raw.slice(0, 120)}…`,
+        );
+      }
+      if (!res.ok) {
+        const err = (data as { error?: string })?.error;
+        throw new Error(err || `HTTP ${res.status}`);
+      }
       onChange(data as VideoAnalysis);
       setOpen(true);
     } catch (e) {
