@@ -4,7 +4,9 @@ import { analyzeVideo } from '@/lib/gemini-video';
 // We accept multipart/form-data with a single field named "video".
 // Max 100 MB. Returns the full VideoAnalysis JSON on success.
 export const runtime = 'nodejs';
-export const maxDuration = 60; // seconds — Gemini analysis usually 5-15s
+// 5 min — Gemini transcoding can take 30-90s for videos > 1 min, plus
+// upload + analysis. The internal helper has its own 4 min poll cap.
+export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
 const MAX_BYTES = 100 * 1024 * 1024; // 100 MB
@@ -49,13 +51,16 @@ export async function POST(req: Request) {
     );
   }
 
+  const t0 = Date.now();
   try {
+    console.log(`[analyze-video] received "${file.name}" — ${(file.size / 1024 / 1024).toFixed(1)} MB, ${file.type}`);
     const buffer = Buffer.from(await file.arrayBuffer());
     const analysis = await analyzeVideo(buffer, file.type);
+    console.log(`[analyze-video] done in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
     return NextResponse.json(analysis);
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unknown error';
-    console.error('[analyze-video]', e);
+    console.error(`[analyze-video] FAILED after ${((Date.now() - t0) / 1000).toFixed(1)}s:`, e);
     return NextResponse.json(
       { error: `Video analysis failed: ${message}` },
       { status: 500 },

@@ -152,15 +152,27 @@ export async function analyzeVideo(
   }
 
   // 2) Wait until the file finishes processing on Google's side (videos go
-  // through a transcoding step before they're queryable).
+  // through a transcoding step before they're queryable). Capped at 4 min
+  // to avoid hanging the whole request indefinitely if Google stalls.
   let file = uploaded.file;
+  console.log(`[analyze-video] uploaded "${file.name}" (${file.sizeBytes ?? '?'} bytes), waiting for processing…`);
+  const POLL_DEADLINE = Date.now() + 4 * 60 * 1000;
+  let pollCount = 0;
   while (file.state === FileState.PROCESSING) {
-    await new Promise((r) => setTimeout(r, 2000));
+    if (Date.now() > POLL_DEADLINE) {
+      throw new Error(`Gemini took longer than 4 minutes to transcode the video (still PROCESSING after ${pollCount} polls).`);
+    }
+    await new Promise((r) => setTimeout(r, 2500));
     file = await files.getFile(file.name);
+    pollCount++;
+    if (pollCount % 4 === 0) {
+      console.log(`[analyze-video] still processing after ${pollCount * 2.5}s…`);
+    }
   }
   if (file.state === FileState.FAILED) {
     throw new Error('Gemini failed to process the uploaded video');
   }
+  console.log(`[analyze-video] file ready after ${pollCount} polls. Running analysis…`);
 
   // 3) Run analysis with JSON-mode output.
   const model = genai.getGenerativeModel({

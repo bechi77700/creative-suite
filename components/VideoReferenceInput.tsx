@@ -44,18 +44,32 @@ export default function VideoReferenceInput({
     }
     setFileName(file.name);
     setLoading(true);
+    // Hard 5 min client-side cap — matches the server's maxDuration. Without
+    // this an unfortunate Google stall would keep the spinner spinning forever.
+    const controller = new AbortController();
+    const abortTimer = setTimeout(() => controller.abort(), 5 * 60 * 1000);
     try {
       const fd = new FormData();
       fd.append('video', file);
-      const res = await fetch('/api/analyze-video', { method: 'POST', body: fd });
+      const res = await fetch('/api/analyze-video', {
+        method: 'POST',
+        body: fd,
+        signal: controller.signal,
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
       onChange(data as VideoAnalysis);
       setOpen(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Analysis failed');
+      const msg = e instanceof Error ? e.message : 'Analysis failed';
+      setError(
+        controller.signal.aborted
+          ? 'Analysis timed out after 5 minutes — Google likely stalled. Try again or use a shorter clip.'
+          : msg,
+      );
       onChange(null);
     } finally {
+      clearTimeout(abortTimer);
       setLoading(false);
       if (inputRef.current) inputRef.current.value = '';
     }
@@ -116,7 +130,10 @@ export default function VideoReferenceInput({
           <span className="inline-block h-3 w-3 rounded-full border-2 border-accent-gold border-t-transparent animate-spin" />
           Analyzing {fileName ? `"${fileName}"` : 'video'}…
         </div>
-        <p className="text-text-muted text-[10px] mt-1">Gemini is transcribing & tagging — usually 10-20s.</p>
+        <p className="text-text-muted text-[10px] mt-1 text-center max-w-xs">
+          Upload → Google transcoding → Gemini analysis. Short clips (&lt;30s) take ~15s.
+          Longer videos (1-2 min) can take 1-3 min. Cap at 5 min.
+        </p>
       </div>
     );
   }
