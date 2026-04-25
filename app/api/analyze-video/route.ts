@@ -29,13 +29,17 @@ export async function POST(req: Request) {
     );
   }
 
-  const file = form.get('video');
-  if (!file || !(file instanceof File)) {
+  // Duck-type instead of `instanceof File`: the File global only exists in
+  // Node 20+, but Railway can run on Node 18. Anything that isn't a string
+  // and exposes arrayBuffer()/type/size is a Blob/File for our purposes.
+  const raw = form.get('video');
+  if (!raw || typeof raw === 'string' || typeof (raw as Blob).arrayBuffer !== 'function') {
     return NextResponse.json(
       { error: 'Missing "video" file in form data' },
       { status: 400 },
     );
   }
+  const file = raw as Blob & { name?: string };
 
   if (!file.type.startsWith('video/')) {
     return NextResponse.json(
