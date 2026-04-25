@@ -1,19 +1,31 @@
 'use client';
 
+// Iterate Video module — generates SIBLING video scripts from a winning
+// reference (pasted script OR analyzed video). Honors the iterate-video SOP:
+// 10-axis closed catalog, 1-2 axes max per generation, Auto mode if user
+// picks none.
+
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { parseSSE } from '@/lib/streaming';
+import type { VideoAnalysis } from '@/lib/gemini-video';
 
-export const VIDEO_ITERATION_STRATEGIES = [
-  { value: 'hook', label: 'Hook variation', desc: 'Same body & CTA, new opening hooks' },
-  { value: 'angle', label: 'Angle pivot', desc: 'Same structure, new psychological angle' },
-  { value: 'pain-promise', label: 'Pain/Promise intensification', desc: 'Push the lever harder' },
-  { value: 'demographic', label: 'Demographic pivot', desc: 'Adapt to a different sub-segment' },
-  { value: 'cta', label: 'CTA / Urgency variation', desc: 'New call-to-action or urgency mechanic' },
-  { value: 'length', label: 'Length adjustment', desc: 'Tighter or longer version' },
-  { value: 'tone', label: 'Tone shift', desc: 'Educational ↔ confrontational ↔ peer ↔ urgent' },
-  { value: 'format', label: 'Format swap', desc: 'Talking-head ↔ POV ↔ before/after ↔ story' },
-];
+// 10-axis catalog — MUST stay in sync with iterate-video-sop.md
+// (the closed-vocabulary list there). Order matters for the UI.
+export const ITERATE_VIDEO_AXES = [
+  { value: 'Format', desc: 'UGC selfie / talking-head / demo / split-screen reaction…' },
+  { value: 'Concept', desc: '"I tried it for 30 days", "stranger asks 5 questions"…' },
+  { value: 'Angle', desc: 'scarcity / social proof / transformation / problem-solution / identity…' },
+  { value: 'Message', desc: 'core promise the viewer leaves with' },
+  { value: 'Hook', desc: 'curiosity gap / contrarian / stat shock / stranger-stop / question…' },
+  { value: 'Body', desc: 'testimonial / demo loop / before-after / story arc / listicle…' },
+  { value: 'Montage vidéo', desc: 'cut speed + dominant treatment (fast cuts, b-roll heavy…)' },
+  { value: 'Awareness', desc: 'Unaware → Problem → Solution → Product → Most Aware' },
+  { value: 'Acteur', desc: 'peer user / aspirational / expert / founder / faceless POV…' },
+  { value: 'Lieu', desc: 'physical setting (bathroom, kitchen, outdoor, studio…)' },
+] as const;
+
+const MAX_AXES = 2;
 
 interface Iteration {
   id: string;
@@ -25,7 +37,7 @@ interface Iteration {
 
 interface ScriptRun {
   id: string;
-  strategiesUsed: string[];
+  axesUsed: string[];
   loading: boolean;
   streamedText: string;
   error: string;
@@ -34,34 +46,42 @@ interface ScriptRun {
 
 interface Props {
   projectId: string;
+  /** Original winning script (verbatim VO if reference is a video). */
   originalScript: string;
+  /** Optional structured analysis when the source is a video. Adds context. */
+  videoAnalysis?: VideoAnalysis | null;
   hideClose?: boolean;
   onClose?: () => void;
 }
 
 function splitIntoIterations(text: string): { body: string }[] {
-  const parts = text.split(/\n##\s+ITERATION\s+\d+\s*\n/i);
+  // Split on "## Sibling N" (SOP) OR legacy "## ITERATION N"
+  const parts = text.split(/\n##\s+(?:Sibling|ITERATION)\s+\d+\s*[—\-:]?[^\n]*\n/i);
   return parts.slice(1).map((p) => ({ body: p.trim() }));
 }
 
 export default function VideoIteratePanel({
   projectId,
   originalScript,
+  videoAnalysis,
   hideClose,
   onClose,
 }: Props) {
-  const [strategies, setStrategies] = useState<Set<string>>(new Set());
+  const [axes, setAxes] = useState<Set<string>>(new Set());
   const [otherInstructions, setOtherInstructions] = useState('');
-  const [count, setCount] = useState('3');
+  const [count, setCount] = useState('4');
 
   const [runs, setRuns] = useState<ScriptRun[]>([]);
   const [validationError, setValidationError] = useState('');
 
-  const toggleStrategy = (value: string) => {
-    setStrategies((prev) => {
+  const toggleAxis = (value: string) => {
+    setAxes((prev) => {
       const next = new Set(prev);
-      if (next.has(value)) next.delete(value);
-      else next.add(value);
+      if (next.has(value)) {
+        next.delete(value);
+      } else if (next.size < MAX_AXES) {
+        next.add(value);
+      }
       return next;
     });
   };
@@ -78,19 +98,15 @@ export default function VideoIteratePanel({
 
   const handleGenerate = async () => {
     setValidationError('');
-    if (strategies.size === 0 && !otherInstructions.trim()) {
-      setValidationError('Pick at least one strategy or write custom instructions.');
+    if (!originalScript.trim() && !videoAnalysis) {
+      setValidationError('Provide a reference script or upload a video first.');
       return;
     }
-    if (!originalScript.trim()) {
-      setValidationError('Paste an original script first.');
-      return;
-    }
-    const n = Math.max(1, parseInt(count) || 3);
+    const n = Math.max(1, parseInt(count) || 4);
     const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const newRun: ScriptRun = {
       id: runId,
-      strategiesUsed: Array.from(strategies),
+      axesUsed: Array.from(axes),
       loading: true,
       streamedText: '',
       error: '',
@@ -105,7 +121,8 @@ export default function VideoIteratePanel({
         body: JSON.stringify({
           projectId,
           originalScript,
-          strategies: Array.from(strategies),
+          videoAnalysis,
+          axes: Array.from(axes),
           otherInstructions,
           count: n,
         }),
@@ -209,13 +226,17 @@ export default function VideoIteratePanel({
   const copyText = (text: string) => navigator.clipboard.writeText(text);
 
   const anyLoading = runs.some((r) => r.loading);
+  const isAutoMode = axes.size === 0;
+  const atCap = axes.size >= MAX_AXES;
 
   return (
     <div className="border border-accent-blue/30 bg-accent-blue/[0.03] rounded-lg p-5 mt-3 space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-text-primary text-sm font-semibold">Iterate on this video script</p>
-          <p className="text-text-muted text-xs mt-0.5">Generate sibling scripts that keep what works.</p>
+          <p className="text-text-muted text-xs mt-0.5">
+            Generate sibling scripts that keep what works — vary 1-2 axes max.
+          </p>
         </div>
         <div className="flex items-center gap-3">
           {runs.length > 0 && (
@@ -236,27 +257,36 @@ export default function VideoIteratePanel({
 
       <div>
         <label className="text-text-muted text-[10px] uppercase tracking-widest block mb-2">
-          Iteration strategies <span className="normal-case">(pick one or more)</span>
+          Axes to vary <span className="normal-case">(optional · max {MAX_AXES} · leave empty = Auto mode, Claude proposes the spread)</span>
         </label>
         <div className="flex flex-wrap gap-1.5">
-          {VIDEO_ITERATION_STRATEGIES.map((s) => {
-            const active = strategies.has(s.value);
+          {ITERATE_VIDEO_AXES.map((s) => {
+            const active = axes.has(s.value);
+            const disabled = !active && atCap;
             return (
               <button
                 key={s.value}
-                onClick={() => toggleStrategy(s.value)}
+                onClick={() => toggleAxis(s.value)}
                 title={s.desc}
+                disabled={disabled}
                 className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${
                   active
                     ? 'bg-accent-blue/20 border-accent-blue/60 text-accent-blue'
+                    : disabled
+                    ? 'border-bg-border/50 text-text-muted/40 cursor-not-allowed'
                     : 'border-bg-border text-text-secondary hover:border-text-muted'
                 }`}
               >
-                {s.label}
+                {s.value}
               </button>
             );
           })}
         </div>
+        <p className="text-text-muted text-[10px] mt-2">
+          {isAutoMode
+            ? '● Auto mode — Claude will pick the most useful axes to vary across siblings.'
+            : `● User-directed mode — every sibling will vary only: ${Array.from(axes).join(' + ')}.`}
+        </p>
       </div>
 
       <div>
@@ -266,7 +296,7 @@ export default function VideoIteratePanel({
         <textarea
           className="input-field resize-none text-xs"
           rows={3}
-          placeholder='e.g. "what worked is the opening callout — push urgency further" / "test versions targeting men 40+"'
+          placeholder='e.g. "push urgency further" / "test versions targeting men 40+" / "we can mention the 30-day refund [NEW CLAIM]"'
           value={otherInstructions}
           onChange={(e) => setOtherInstructions(e.target.value)}
         />
@@ -274,7 +304,7 @@ export default function VideoIteratePanel({
 
       <div>
         <label className="text-text-muted text-[10px] uppercase tracking-widest block mb-1">
-          Number of scripts
+          Number of siblings
         </label>
         <input
           className="input-field text-xs"
@@ -293,7 +323,7 @@ export default function VideoIteratePanel({
       >
         {anyLoading
           ? `Generating…`
-          : `Generate ${parseInt(count) || 3} script${parseInt(count) === 1 ? '' : 's'}`}
+          : `Generate ${parseInt(count) || 4} sibling${parseInt(count) === 1 ? '' : 's'}`}
       </button>
 
       {validationError && (
@@ -309,11 +339,9 @@ export default function VideoIteratePanel({
             <p className="text-text-secondary text-xs uppercase tracking-widest">
               Run {runs.length - runIdx}
               {run.loading && <span className="ml-2 text-accent-blue animate-pulse">● streaming…</span>}
-              {run.strategiesUsed.length > 0 && (
-                <span className="ml-2 text-text-muted normal-case">
-                  ({run.strategiesUsed.join(', ')})
-                </span>
-              )}
+              <span className="ml-2 text-text-muted normal-case">
+                ({run.axesUsed.length === 0 ? 'auto mode' : `varying ${run.axesUsed.join(' + ')}`})
+              </span>
             </p>
             <button
               onClick={() => deleteRun(run.id)}
@@ -345,12 +373,12 @@ export default function VideoIteratePanel({
           {!run.loading && run.iterations.length > 0 && (
             <div className="space-y-4">
               <p className="text-text-secondary text-xs uppercase tracking-widest">
-                {run.iterations.length} script{run.iterations.length === 1 ? '' : 's'} generated
+                {run.iterations.length} sibling{run.iterations.length === 1 ? '' : 's'} generated
               </p>
               {run.iterations.map((it, idx) => (
                 <div key={it.id} className="border border-bg-border rounded-lg overflow-hidden group/iter">
                   <div className="flex items-center justify-between px-4 py-2 bg-bg-elevated">
-                    <span className="text-text-primary text-xs font-semibold">Iteration {idx + 1}</span>
+                    <span className="text-text-primary text-xs font-semibold">Sibling {idx + 1}</span>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => copyText(it.body)}

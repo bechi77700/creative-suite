@@ -4,20 +4,13 @@ import type { VideoAnalysis } from '@/lib/gemini-video';
 
 export const maxDuration = 300;
 
-// 10-axis catalog — MUST stay in sync with iterate-video-sop.md and the
-// VideoIteratePanel.tsx ITERATE_VIDEO_AXES list.
-const AXIS_CATALOG = [
-  'Format', 'Concept', 'Angle', 'Message', 'Hook', 'Body',
-  'Montage vidéo', 'Awareness', 'Acteur', 'Lieu',
-] as const;
-
 function sse(event: string, data: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
 
-// Render the structured analysis as a compact text block we can paste into
-// the Claude prompt. Keeps token usage reasonable while preserving the parts
-// that matter for sibling generation (axes tags + structure + verbatim VO).
+// Same renderer as iterate-video — keeps the Gemini analysis compact for the
+// Claude prompt while preserving the parts that drive the SOP (verbatim VO,
+// shots, axes tagging).
 function renderAnalysis(a: VideoAnalysis): string {
   const shots = (a.shots || [])
     .map((s, i) => `  ${i + 1}. [${s.t}] ${s.type} · ${s.camera} · ${s.subject}${s.vo ? ` — VO: "${s.vo}"` : ''}${s.onScreen ? ` — text: "${s.onScreen}"` : ''}`)
@@ -53,7 +46,7 @@ PSYCHOLOGICAL ANGLE: ${a.psychologicalAngle}
 NARRATIVE STRUCTURE: ${a.narrativeStructure}
 CTA (${a.cta.timing} · ${a.cta.type}): "${a.cta.text}"
 
-CURRENT AXES TAGGING (the values below define the WINNING DNA — preserve every axis you don't explicitly vary):
+REFERENCE AXES TAGGING:
 ${axesLines}`;
 }
 
@@ -62,35 +55,18 @@ export async function POST(req: Request) {
     const body = await req.json();
     const {
       projectId,
-      originalScript,
-      videoAnalysis = null,
-      axes = [],
-      otherInstructions = '',
+      videoAnalysis,
+      additionalContext = '',
       count,
     }: {
       projectId: string;
-      originalScript: string;
-      videoAnalysis?: VideoAnalysis | null;
-      axes?: string[];
-      otherInstructions?: string;
+      videoAnalysis: VideoAnalysis;
+      additionalContext?: string;
       count?: number;
     } = body;
 
-    // Either a pasted script OR a video analysis is required.
-    const hasScript = !!originalScript?.trim();
-    const hasVideo = !!videoAnalysis;
-    if (!hasScript && !hasVideo) {
-      return new Response(JSON.stringify({ error: 'Provide a reference script or upload a video.' }), {
-        status: 400, headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Validate axes against the catalog.
-    const validAxes = (axes || []).filter((a): a is typeof AXIS_CATALOG[number] =>
-      (AXIS_CATALOG as readonly string[]).includes(a),
-    );
-    if (validAxes.length > 2) {
-      return new Response(JSON.stringify({ error: 'Max 2 axes per generation.' }), {
+    if (!videoAnalysis) {
+      return new Response(JSON.stringify({ error: 'A video analysis is required (upload a reference video first).' }), {
         status: 400, headers: { 'Content-Type': 'application/json' },
       });
     }
@@ -107,27 +83,17 @@ export async function POST(req: Request) {
 
     const brandContext = project.documents.map((d) => `[${d.type.toUpperCase()} — ${d.name}]`).join('\n');
     const knowledgeContext = globalKnowledge.map((k) => `[${k.category.toUpperCase()} — ${k.name}]`).join('\n');
-    const n = Math.max(1, Math.min(20, count || 4));
+    const n = Math.max(1, Math.min(10, count || 3));
 
-    // Mode: Auto vs User-directed (per SOP)
-    const isAuto = validAxes.length === 0;
-    const modeBlock = isAuto
-      ? `MODE: **AUTO** — The user has NOT specified which axes to vary. You must pick a useful spread across siblings. Each sibling varies 1 to 2 axes from the catalog (no more), and the spread across the ${n} siblings should cover meaningfully different axis combinations (don't pick the same axis for all siblings).`
-      : `MODE: **USER-DIRECTED** — The user has explicitly chosen the axes to vary: **${validAxes.join(' + ')}**. Every sibling MUST vary ONLY these axes — never any others. Every other axis stays identical to the reference's tagging.`;
-
-    const referenceBlock = hasVideo
-      ? renderAnalysis(videoAnalysis!)
-      : `REFERENCE WINNING SCRIPT (verbatim):
-
-${originalScript.trim()}`;
-
-    const otherBlock = otherInstructions.trim()
-      ? `\nADDITIONAL CUSTOM INSTRUCTIONS FROM USER (apply as a high-priority constraint — if the user opens the door to new claims, use the inline tag [NEW CLAIM] on each new factual claim you add):\n${otherInstructions.trim()}`
+    const additionalBlock = additionalContext.trim()
+      ? `\nADDITIONAL CONTEXT FROM USER (apply as a high-priority constraint):\n${additionalContext.trim()}`
       : '';
 
     const promptText = `${GENERATION_RULES}
 
-You are running the **Iterate Video** SOP for a Meta Ads VIDEO SCRIPT that has ALREADY been validated as a winner. Follow the SOP that lives in the brand's Knowledge Base ("iterate-video-sop.md") — it defines the 10-axis closed catalog, Auto vs User-directed mode, the 1-2 axes-per-sibling rule, and the required output format.
+You are running the **Clone & Adapt** SOP for a Meta Ads VIDEO SCRIPT. Follow the SOP that lives in the brand's Knowledge Base ("clone-and-adapt-video-sop.md") — it defines the mandatory two-phase output (Structural Autopsy + Adapted Scripts), the ±10% word-count rule, the same-blocks-same-order rule, the Copy DNA preservation, and the no-fabrication-of-brand-facts rule.
+
+The reference is from a DIFFERENT vertical / different product than the user's brand — that's expected. We are NOT cloning the product. We are cloning the **mechanism that made the ad work**: structure, pacing, copy DNA, persuasive architecture.
 
 BRAND: ${project.name}
 
@@ -138,56 +104,76 @@ BRAND DOCUMENTS:
 ${brandContext || '(none)'}
 
 ─────────────────────────────────────────────
-REFERENCE
+REFERENCE VIDEO
 ─────────────────────────────────────────────
-${referenceBlock}
+${renderAnalysis(videoAnalysis)}
 
 ─────────────────────────────────────────────
-ITERATION CONFIG
+GENERATION CONFIG
 ─────────────────────────────────────────────
-${modeBlock}
-Number of siblings to generate: ${n}
-${otherBlock}
+Number of adapted scripts to produce: ${n}
+Output language: English (US market)
+${additionalBlock}
 
 ─────────────────────────────────────────────
-HARD RULES (from the SOP)
+HARD RULES (from the SOP — non-negotiable)
 ─────────────────────────────────────────────
-- Closed catalog of axes (no inventions): ${AXIS_CATALOG.join(' · ')}.
-- Each sibling varies 1 OR 2 axes — never more.
-- Every axis NOT in the varied list must remain identical to the reference's tagging.
-- Each sibling must clearly differ from the others (different axis combos when in Auto mode; different angles within the same axes when in User-directed mode).
+- Same blocks, same order, same names as the reference (HOOK / LEAD / PROBLEM / PROOF / DEMO / TESTIMONY / OBJECTION / OFFER / CTA — pick those that actually fit).
+- Same word counts per block (±10%).
+- Same total length (±10%).
+- Same Copy DNA: sentence length, tone, tense, person, rhetorical devices.
+- Same hook MECHANISM, not the same hook content (curiosity gap → curiosity gap, never curiosity gap → question).
+- Pull product specifics from the brand's Saint Graal / project documents only. NEVER invent claims, prices, ingredients, results, or guarantees.
+- Translate vertical-specific elements 1:1 (e.g. reference: "my skin texture changed" → adapted for haircare: "my hair density changed"). The function survives; only the noun shifts.
+- Tag every block with the same labels in both phases.
 - Aggressive US direct response — no softening, no hedging.
-- Pure spoken words and on-screen text only — NO camera directions, NO "[cut to]", NO editor instructions inside the script blocks.
-- No new factual claims unless the user's custom instructions explicitly opened that door — and even then, tag them inline with [NEW CLAIM].
-- Pull all brand specifics (price, ingredients, results, guarantees) from the brand's Saint Graal / project documents only.
+- Pure spoken words and on-screen text only — no camera directions inside script blocks.
 
 ─────────────────────────────────────────────
 OUTPUT FORMAT — exact, mandatory
 ─────────────────────────────────────────────
-Start the response with a one-line **Winner Autopsy** of max 200 words:
+Start the response IMMEDIATELY with "## Phase 1 — Autopsy". No preamble, no "Here's the analysis…" filler.
 
-## Winner Autopsy
-- **Why it works:** 2-3 bullets, each pointing at a concrete persuasive mechanism with timestamps.
-- **Current axes tagging:** one-line summary of the reference's tagging across the 10 axes.
+## Phase 1 — Autopsy
 
-Then output exactly ${n} siblings, each in this exact form (the "## Sibling N" headings are MANDATORY and must be on their own line):
+(Hard cap: 250 words for the entire autopsy. Operational only — no marketing fluff.)
+
+#### Why It Works
+(3 to 5 bullets. Each bullet names a specific persuasive mechanism with the timestamp where it fires.)
+
+#### Skeleton
+(Numbered list of every script block in the reference, in order, with: block name, timestamp range, word count, function — one short sentence.)
+
+#### Copy DNA
+(3 to 6 bullets: avg sentence length, tone, tense, person, devices used, vocabulary register.)
+
+#### Verbatim Transcript
+(The full voice-over, word for word, with structural tags inline like [HOOK], [LEAD], [PROOF], [OFFER], [CTA].)
+
+## Phase 2 — Adapted Scripts
+
+Then output exactly ${n} adapted scripts, each as a structural twin of the reference. Use this exact format:
 
 ${Array.from({ length: n }, (_, i) => `
-## Sibling ${i + 1} — Varied axes: <axis 1>[, <axis 2>]
+### Script ${i + 1} — <one-line angle description, max 12 words>
+**Total:** ~<seconds>s · ~<words> words
 
-**Hypothesis:** <one short sentence — why this variation should test well>
+[HOOK · <timestamp> · <wordcount> words]
+<text>
 
-### HOOK
-<spoken words for the first 2-3 seconds>
+[LEAD · <timestamp> · <wordcount> words]
+<text>
 
-### BODY
-<the full body of the script, tagged blocks if useful (LEAD / PROOF / DEMO / OBJECTION / OFFER) inside>
+[<NEXT BLOCK> · <timestamp> · <wordcount> words]
+<text>
 
-### CTA
-<the closing call to action — spoken or on-screen>
+(...continue with every block from the reference's skeleton, in the same order...)
 
-**What changed vs reference:** <one sentence specifying the modification on each varied axis>
-`).join('\n---\n')}`;
+[CTA · <timestamp> · <wordcount> words]
+<text>
+`).join('\n')}
+
+Repeat for every script ${n > 1 ? `(Script 1 through Script ${n})` : ''}, keeping the skeleton frozen and varying only the angle / opening line / proof point.`;
 
     const anthropic = getAnthropic();
     const encoder = new TextEncoder();
@@ -198,7 +184,7 @@ ${Array.from({ length: n }, (_, i) => `
         try {
           const messageStream = anthropic.messages.stream({
             model: MODEL,
-            max_tokens: 3000 + n * 800,
+            max_tokens: 4000 + n * 1000,
             messages: [{ role: 'user', content: promptText }],
           });
 
@@ -213,12 +199,11 @@ ${Array.from({ length: n }, (_, i) => `
           const generation = await prisma.generation.create({
             data: {
               projectId,
-              module: 'iterate-video',
+              module: 'clone-and-adapt-video',
               inputs: JSON.stringify({
-                originalScript,
-                hasVideoAnalysis: hasVideo,
-                axes: validAxes,
-                otherInstructions,
+                referenceFormat: videoAnalysis.format,
+                referenceDuration: videoAnalysis.duration,
+                additionalContext,
                 count: n,
               }),
               output: fullText,
@@ -229,7 +214,7 @@ ${Array.from({ length: n }, (_, i) => `
           controller.close();
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err);
-          console.error('[iterate-video stream] ERROR:', message);
+          console.error('[clone-and-adapt-video stream] ERROR:', message);
           controller.enqueue(encoder.encode(sse('error', { error: message })));
           controller.close();
         }
@@ -246,7 +231,7 @@ ${Array.from({ length: n }, (_, i) => `
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error('[iterate-video] ERROR:', message);
+    console.error('[clone-and-adapt-video] ERROR:', message);
     return new Response(JSON.stringify({ error: message }), {
       status: 500, headers: { 'Content-Type': 'application/json' },
     });

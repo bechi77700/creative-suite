@@ -5,6 +5,9 @@ import Sidebar from '@/components/Sidebar';
 import SaintGraalGate from '@/components/SaintGraalGate';
 import ReactMarkdown from 'react-markdown';
 import { addWinner, removeWinner } from '@/lib/winners';
+import VideoReferenceInput from '@/components/VideoReferenceInput';
+import { parseSSE } from '@/lib/streaming';
+import type { VideoAnalysis } from '@/lib/gemini-video';
 
 // Parse the angles markdown returned by /api/generate/video-angles into
 // individual angle blocks (one per checkbox). Each block looks like:
@@ -57,6 +60,15 @@ const VIDEO_FORMATS = [
 const LENGTHS = ['7-15s', '15-30s', '30-45s', '45-60s', '60-90s', '90-120s', '2-3 min', '3-5 min'];
 
 type Step = 1 | 2 | 3 | 4;
+type Mode = 'scratch' | 'clone';
+
+interface CloneRun {
+  id: string;
+  output: string;
+  loading: boolean;
+  error: string;
+  generationId: string;
+}
 
 interface ScriptRun {
   id: string;
@@ -78,6 +90,84 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
   const [projectName, setProjectName] = useState('');
   const [hasSaintGraal, setHasSaintGraal] = useState<boolean | null>(null);
   const [step, setStep] = useState<Step>(1);
+  const [mode, setMode] = useState<Mode>('scratch');
+
+  // ── Clone & Adapt state ─────────────────
+  const [cloneAnalysis, setCloneAnalysis] = useState<VideoAnalysis | null>(null);
+  const [cloneCount, setCloneCount] = useState('3');
+  const [cloneAdditional, setCloneAdditional] = useState('');
+  const [cloneRuns, setCloneRuns] = useState<CloneRun[]>([]);
+  const cloneAnyLoading = cloneRuns.some((r) => r.loading);
+
+  const updateCloneRun = (runId: string, patch: Partial<CloneRun>) => {
+    setCloneRuns((prev) => prev.map((r) => (r.id === runId ? { ...r, ...patch } : r)));
+  };
+
+  const generateCloneAndAdapt = async () => {
+    if (!cloneAnalysis) return;
+    const n = Math.max(1, Math.min(10, parseInt(cloneCount) || 3));
+    const runId = `clone-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const newRun: CloneRun = {
+      id: runId,
+      output: '',
+      loading: true,
+      error: '',
+      generationId: '',
+    };
+    setCloneRuns((prev) => [newRun, ...prev]);
+
+    try {
+      const res = await fetch('/api/generate/clone-and-adapt-video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: id,
+          videoAnalysis: cloneAnalysis,
+          additionalContext: cloneAdditional,
+          count: n,
+        }),
+      });
+
+      if (!res.ok || !res.body) {
+        let errMsg = `Server error ${res.status}`;
+        try {
+          const err = await res.json();
+          errMsg = err.error || errMsg;
+        } catch { /* noop */ }
+        updateCloneRun(runId, { error: errMsg, loading: false });
+        return;
+      }
+
+      let accumulated = '';
+      let generationId = '';
+      for await (const evt of parseSSE(res.body)) {
+        if (evt.event === 'text') {
+          accumulated += (evt.data as { text: string }).text;
+          updateCloneRun(runId, { output: accumulated });
+        } else if (evt.event === 'done') {
+          generationId = (evt.data as { generationId: string }).generationId;
+        } else if (evt.event === 'error') {
+          updateCloneRun(runId, { error: (evt.data as { error: string }).error });
+        }
+      }
+      updateCloneRun(runId, { loading: false, generationId });
+    } catch (e) {
+      updateCloneRun(runId, {
+        error: e instanceof Error ? e.message : 'Unexpected error',
+        loading: false,
+      });
+    }
+  };
+
+  const deleteCloneRun = async (runId: string) => {
+    const run = cloneRuns.find((r) => r.id === runId);
+    if (!run) return;
+    if (!confirm('Delete this Clone & Adapt set?')) return;
+    if (run.generationId) {
+      try { await fetch(`/api/history/${run.generationId}`, { method: 'DELETE' }); } catch { /* noop */ }
+    }
+    setCloneRuns((prev) => prev.filter((r) => r.id !== runId));
+  };
 
   const [selectedFormat, setSelectedFormat] = useState('');
   const [selectedLength, setSelectedLength] = useState('');
@@ -293,14 +383,48 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
         <div className="w-full md:w-80 md:max-h-none max-h-[55vh] md:flex-shrink-0 border-b md:border-b-0 md:border-r border-bg-border overflow-y-auto bg-bg-elevated flex flex-col">
           <div className="px-5 py-5 border-b border-bg-border">
             <h1 className="text-text-primary font-semibold text-base">Video Script Generator</h1>
-            <div className="flex flex-col gap-2 mt-4">
-              <StepBadge n={1} label="Choose Format" />
-              <StepBadge n={2} label="Choose Length" />
-              <StepBadge n={3} label="Select Angle" />
-              <StepBadge n={4} label="Script Ready" />
+
+            {/* Mode toggle */}
+            <div className="grid grid-cols-2 gap-1 mt-3 p-1 bg-bg-base rounded-md border border-bg-border">
+              <button
+                onClick={() => setMode('scratch')}
+                className={`text-xs py-1.5 rounded transition-colors ${
+                  mode === 'scratch'
+                    ? 'bg-accent-gold/20 text-accent-gold font-semibold'
+                    : 'text-text-muted hover:text-text-secondary'
+                }`}
+              >
+                ✦ From scratch
+              </button>
+              <button
+                onClick={() => setMode('clone')}
+                className={`text-xs py-1.5 rounded transition-colors ${
+                  mode === 'clone'
+                    ? 'bg-accent-violet/20 text-accent-violet font-semibold'
+                    : 'text-text-muted hover:text-text-secondary'
+                }`}
+              >
+                ⎘ Clone & Adapt
+              </button>
             </div>
+
+            {mode === 'scratch' && (
+              <div className="flex flex-col gap-2 mt-4">
+                <StepBadge n={1} label="Choose Format" />
+                <StepBadge n={2} label="Choose Length" />
+                <StepBadge n={3} label="Select Angle" />
+                <StepBadge n={4} label="Script Ready" />
+              </div>
+            )}
+            {mode === 'clone' && (
+              <p className="text-text-muted text-[11px] mt-3 leading-relaxed">
+                Upload a winning video from another brand — Gemini transcribes & decodes it,
+                Claude clones the structure for your brand following the SOP.
+              </p>
+            )}
           </div>
 
+          {mode === 'scratch' && (
           <div className="p-5 space-y-5 flex-1">
             {/* Step 1: Format */}
             <div>
@@ -382,8 +506,62 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
               </div>
             )}
           </div>
+          )}
 
-          {runs.length > 0 && (
+          {mode === 'clone' && (
+            <div className="p-5 space-y-4 flex-1">
+              <div>
+                <label className="text-text-muted text-xs mb-2 block uppercase tracking-widest">Reference video</label>
+                <VideoReferenceInput
+                  analysis={cloneAnalysis}
+                  onChange={setCloneAnalysis}
+                  emptyLabel="↑ Upload the reference video"
+                />
+              </div>
+
+              <div>
+                <label className="text-text-muted text-xs mb-1.5 block uppercase tracking-widest">Number of adapted scripts</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  className="input-field text-xs"
+                  value={cloneCount}
+                  onChange={(e) => setCloneCount(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="text-text-muted text-xs mb-1.5 block uppercase tracking-widest">Additional context <span className="normal-case">(optional)</span></label>
+                <textarea
+                  className="input-field resize-none text-xs"
+                  rows={3}
+                  placeholder='e.g. "lean on the 30-day refund", "target men 35+", "we want a softer CTA"'
+                  value={cloneAdditional}
+                  onChange={(e) => setCloneAdditional(e.target.value)}
+                />
+              </div>
+
+              <button
+                onClick={generateCloneAndAdapt}
+                disabled={!cloneAnalysis || cloneAnyLoading}
+                className="btn-primary w-full text-xs"
+              >
+                {cloneAnyLoading
+                  ? 'Cloning & adapting…'
+                  : `⎘ Clone & Adapt — ${parseInt(cloneCount) || 3} script${parseInt(cloneCount) === 1 ? '' : 's'}`}
+              </button>
+
+              {!cloneAnalysis && (
+                <p className="text-text-muted text-[11px] leading-relaxed">
+                  Upload a reference video first. Once Gemini finishes the analysis (~10-20s),
+                  the button activates and Claude will produce the autopsy + adapted scripts in one go.
+                </p>
+              )}
+            </div>
+          )}
+
+          {mode === 'scratch' && runs.length > 0 && (
             <div className="px-5 py-3 border-t border-bg-border">
               <button
                 onClick={clearAll}
@@ -393,10 +571,79 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
               </button>
             </div>
           )}
+          {mode === 'clone' && cloneRuns.length > 0 && (
+            <div className="px-5 py-3 border-t border-bg-border">
+              <button
+                onClick={() => {
+                  if (confirm(`Clear all ${cloneRuns.length} Clone & Adapt set${cloneRuns.length !== 1 ? 's' : ''}?`)) setCloneRuns([]);
+                }}
+                className="text-text-muted hover:text-accent-red text-[10px] uppercase tracking-widest w-full text-center transition-colors"
+              >
+                Clear all ({cloneRuns.length})
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Right: Angles + Output */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {mode === 'clone' && (
+            <>
+              {cloneRuns.length === 0 && !cloneAnalysis && (
+                <div className="card p-12 text-center">
+                  <p className="text-text-muted text-3xl mb-3">⎘</p>
+                  <p className="text-text-secondary text-sm">Upload a reference video to begin.</p>
+                  <p className="text-text-muted text-xs mt-1 max-w-md mx-auto">
+                    The output will follow the Clone &amp; Adapt SOP — a Structural Autopsy of the
+                    reference, then {parseInt(cloneCount) || 3} adapted scripts that mirror its skeleton
+                    and copy DNA for your brand.
+                  </p>
+                </div>
+              )}
+
+              {cloneRuns.map((run) => (
+                <div key={run.id} className="card group/clone">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-bg-border">
+                    <div>
+                      <span className="text-text-muted text-xs uppercase tracking-widest">Clone &amp; Adapt</span>
+                      {run.loading && <span className="ml-3 text-accent-violet animate-pulse text-xs">● streaming…</span>}
+                    </div>
+                    <div className="flex gap-2 items-center">
+                      {run.output && (
+                        <button onClick={() => copyText(run.output)} className="btn-secondary text-xs px-3 py-1">Copy</button>
+                      )}
+                      <button
+                        onClick={() => deleteCloneRun(run.id)}
+                        title="Delete this set"
+                        className="text-text-muted/40 hover:text-accent-red text-sm w-7 h-7 flex items-center justify-center rounded transition-colors opacity-0 group-hover/clone:opacity-100"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                  {run.error && (
+                    <div className="px-4 py-3 border-b border-red-500/30 bg-red-500/10 text-red-400 text-xs">
+                      {run.error}
+                    </div>
+                  )}
+                  {run.loading && !run.output && (
+                    <div className="p-8 flex items-center justify-center gap-3">
+                      <div className="w-5 h-5 border-2 border-accent-violet/30 border-t-accent-violet rounded-full animate-spin" />
+                      <span className="text-text-secondary text-xs">Running autopsy + writing adapted scripts…</span>
+                    </div>
+                  )}
+                  {run.output && (
+                    <div className="p-5 result-content">
+                      <ReactMarkdown>{run.output}</ReactMarkdown>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </>
+          )}
+
+          {mode === 'scratch' && (
+          <>
           {/* Angles */}
           {anglesLoading && (
             <div className="card p-8 flex items-center justify-center gap-3">
@@ -592,6 +839,8 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
               <p className="text-text-muted text-3xl mb-3">▶</p>
               <p className="text-text-secondary text-sm">Select a format and length to begin.</p>
             </div>
+          )}
+          </>
           )}
         </div>
       </div>

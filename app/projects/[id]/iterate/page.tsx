@@ -5,6 +5,8 @@ import Sidebar from '@/components/Sidebar';
 import IteratePanel from '@/components/IteratePanel';
 import VideoIteratePanel from '@/components/VideoIteratePanel';
 import MultiImageInput, { RefImage } from '@/components/MultiImageInput';
+import VideoReferenceInput from '@/components/VideoReferenceInput';
+import type { VideoAnalysis } from '@/lib/gemini-video';
 
 type Tab = 'photo' | 'video';
 
@@ -41,6 +43,7 @@ export default function IteratePage({ params }: { params: { id: string } }) {
   // ── Video state ───────────────────────────
   const [videoSelectedScript, setVideoSelectedScript] = useState('');
   const [videoPastedScript, setVideoPastedScript] = useState('');
+  const [videoAnalysis, setVideoAnalysis] = useState<VideoAnalysis | null>(null);
 
   useEffect(() => {
     fetch(`/api/projects/${id}`).then((r) => r.json()).then((d) => setProjectName(d.name));
@@ -56,7 +59,14 @@ export default function IteratePage({ params }: { params: { id: string } }) {
   const photoActivePrompt = (photoSelectedPrompt || photoPastedPrompt).trim();
   const photoCanIterate = !!photoActivePrompt || photoRefImages.length > 0;
 
-  const videoActiveScript = (videoSelectedScript || videoPastedScript).trim();
+  // Priority for the script source: explicit selection > pasted > analyzed video VO.
+  const videoActiveScript = (
+    videoSelectedScript ||
+    videoPastedScript ||
+    videoAnalysis?.voiceOverFull ||
+    ''
+  ).trim();
+  const videoCanIterate = !!videoActiveScript || !!videoAnalysis;
 
   // Winners filtered per tab — photo iterate uses static-ad code blocks;
   // video iterate uses any winner whose module is video / iterate-video.
@@ -235,15 +245,31 @@ export default function IteratePage({ params }: { params: { id: string } }) {
                     onChange={(e) => { setVideoPastedScript(e.target.value); setVideoSelectedScript(''); }}
                   />
                 </div>
+
+                <div>
+                  <label className="text-text-muted text-[10px] uppercase tracking-widest block mb-1">
+                    Or upload a reference video <span className="normal-case">(Gemini transcribes & auto-tags the 10 axes)</span>
+                  </label>
+                  <VideoReferenceInput
+                    analysis={videoAnalysis}
+                    onChange={(a) => {
+                      setVideoAnalysis(a);
+                      // When a video is analyzed, clear the other sources so the analysis drives the run.
+                      if (a) { setVideoSelectedScript(''); setVideoPastedScript(''); }
+                    }}
+                    emptyLabel="↑ Upload a reference video"
+                  />
+                </div>
               </div>
 
-              {videoActiveScript ? (
+              {videoCanIterate ? (
                 <div>
                   <p className="text-text-secondary text-xs uppercase tracking-widest mb-2">2 · Configure iterations</p>
                   <VideoIteratePanel
-                    key={videoActiveScript.slice(0, 40)}
+                    key={(videoAnalysis?.voiceOverFull || videoActiveScript).slice(0, 40)}
                     projectId={id}
                     originalScript={videoActiveScript}
+                    videoAnalysis={videoAnalysis}
                     hideClose
                   />
                 </div>
