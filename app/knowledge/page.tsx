@@ -33,6 +33,17 @@ export default function KnowledgePage() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('copywriting_books');
+  const [dragOver, setDragOver] = useState(false);
+
+  const uploadFile = async (file: File) => {
+    setUploading(true);
+    const form = new FormData();
+    form.append('file', file);
+    form.append('category', selectedCategory);
+    await fetch('/api/knowledge', { method: 'POST', body: form });
+    setUploading(false);
+    fetchItems();
+  };
 
   const fetchItems = async () => {
     const res = await fetch('/api/knowledge');
@@ -46,13 +57,7 @@ export default function KnowledgePage() {
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setUploading(true);
-    const form = new FormData();
-    form.append('file', file);
-    form.append('category', selectedCategory);
-    await fetch('/api/knowledge', { method: 'POST', body: form });
-    setUploading(false);
-    fetchItems();
+    await uploadFile(file);
     e.target.value = '';
   };
 
@@ -80,8 +85,27 @@ export default function KnowledgePage() {
           </div>
 
           {/* Upload */}
-          <div className="card p-5 mb-6">
-            <h2 className="text-text-primary text-sm font-semibold mb-3">Add to Knowledge Base</h2>
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (!uploading) setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={async (e) => {
+              e.preventDefault();
+              setDragOver(false);
+              if (uploading) return;
+              const file = e.dataTransfer.files?.[0];
+              if (file) await uploadFile(file);
+            }}
+            className={`card p-5 mb-6 transition-colors ${
+              dragOver ? 'border-accent-gold/60 bg-accent-gold/5' : ''
+            }`}
+          >
+            <h2 className="text-text-primary text-sm font-semibold mb-3">
+              Add to Knowledge Base
+              {dragOver && <span className="ml-2 text-accent-gold text-xs">Drop to upload</span>}
+            </h2>
             <div className="flex gap-3 items-end">
               <div className="flex-1">
                 <label className="text-text-muted text-xs mb-1.5 block">Category</label>
@@ -100,7 +124,9 @@ export default function KnowledgePage() {
                 <input type="file" className="hidden" onChange={handleUpload} accept=".pdf,.txt,.md,.doc,.docx,.jpg,.jpeg,.png" />
               </label>
             </div>
-            <p className="text-text-muted text-xs mt-2">PDF, TXT, MD, DOC, images — stored globally and used in all generations.</p>
+            <p className="text-text-muted text-xs mt-2">
+              PDF, TXT, MD, DOC, images — stored globally and used in all generations · or drag &amp; drop anywhere on this card
+            </p>
           </div>
 
           {/* Stats */}

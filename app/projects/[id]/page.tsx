@@ -37,6 +37,17 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const [project, setProject] = useState<Project | null>(null);
   const [uploading, setUploading] = useState(false);
   const [selectedType, setSelectedType] = useState('saint_graal_doc');
+  const [dragOver, setDragOver] = useState(false);
+
+  const uploadFile = async (file: File) => {
+    setUploading(true);
+    const form = new FormData();
+    form.append('file', file);
+    form.append('type', selectedType);
+    await fetch(`/api/projects/${id}`, { method: 'POST', body: form });
+    setUploading(false);
+    fetchProject();
+  };
 
   const fetchProject = async () => {
     const res = await fetch(`/api/projects/${id}`);
@@ -49,13 +60,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setUploading(true);
-    const form = new FormData();
-    form.append('file', file);
-    form.append('type', selectedType);
-    await fetch(`/api/projects/${id}`, { method: 'POST', body: form });
-    setUploading(false);
-    fetchProject();
+    await uploadFile(file);
     e.target.value = '';
   };
 
@@ -91,8 +96,27 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
           </div>
 
           {/* Upload */}
-          <div className="card p-5 mb-6">
-            <h2 className="text-text-primary text-sm font-semibold mb-3">Upload Document</h2>
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (!uploading) setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={async (e) => {
+              e.preventDefault();
+              setDragOver(false);
+              if (uploading) return;
+              const file = e.dataTransfer.files?.[0];
+              if (file) await uploadFile(file);
+            }}
+            className={`card p-5 mb-6 transition-colors ${
+              dragOver ? 'border-accent-gold/60 bg-accent-gold/5' : ''
+            }`}
+          >
+            <h2 className="text-text-primary text-sm font-semibold mb-3">
+              Upload Document
+              {dragOver && <span className="ml-2 text-accent-gold text-xs">Drop to upload</span>}
+            </h2>
             <div className="flex gap-3 items-end">
               <div className="flex-1">
                 <label className="text-text-muted text-xs mb-1.5 block">Document Type</label>
@@ -111,7 +135,9 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                 <input type="file" className="hidden" onChange={handleUpload} accept=".pdf,.txt,.md,.doc,.docx,.jpg,.jpeg,.png,.webp" />
               </label>
             </div>
-            <p className="text-text-muted text-xs mt-2">PDF, TXT, MD, DOC, DOCX, images — max 10MB</p>
+            <p className="text-text-muted text-xs mt-2">
+              PDF, TXT, MD, DOC, DOCX, images — max 10MB · or drag &amp; drop anywhere on this card
+            </p>
           </div>
 
           {/* Documents by type */}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 
 export interface RefImage {
   base64: string;
@@ -50,11 +50,16 @@ export default function MultiImageInput({
   className = '',
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [dragOver, setDragOver] = useState(false);
 
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const room = Math.max(0, max - images.length);
-    const incoming = Array.from(files).slice(0, room);
+    // Filter to images only (drops can carry anything).
+    const incoming = Array.from(files)
+      .filter((f) => f.type.startsWith('image/'))
+      .slice(0, room);
+    if (incoming.length === 0) return;
     const next = await Promise.all(incoming.map(readFileAsRefImage));
     onChange([...images, ...next]);
     if (inputRef.current) inputRef.current.value = '';
@@ -93,9 +98,23 @@ export default function MultiImageInput({
 
       {canAddMore && (
         <label
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            handleFiles(e.dataTransfer.files);
+          }}
           className={`flex flex-col items-center justify-center ${
             compact ? 'h-20' : 'h-24'
-          } border border-dashed border-bg-border rounded-md cursor-pointer hover:border-accent-gold/50 transition-colors group`}
+          } border border-dashed rounded-md cursor-pointer transition-colors group ${
+            dragOver
+              ? 'border-accent-gold/70 bg-accent-gold/5'
+              : 'border-bg-border hover:border-accent-gold/50'
+          }`}
         >
           <span className="text-text-muted text-xs group-hover:text-text-secondary transition-colors">
             {images.length === 0 ? emptyLabel : `↑ Add another (${images.length}/${max})`}
