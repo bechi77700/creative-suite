@@ -5,10 +5,12 @@ import Sidebar from '@/components/Sidebar';
 import SaintGraalGate from '@/components/SaintGraalGate';
 import ReactMarkdown from 'react-markdown';
 import { addWinner, removeWinner, parseNumberedBlocks } from '@/lib/winners';
+import VideoReferenceInput from '@/components/VideoReferenceInput';
+import type { VideoAnalysis } from '@/lib/gemini-video';
 
-type Mode = 'from_script' | 'from_brand';
+type Mode = 'from_script' | 'from_brand' | 'from_video';
 
-const HOOK_COUNTS = [6, 12, 18, 24] as const;
+const HOOK_COUNTS = [1, 3, 6, 10] as const;
 type HookCount = (typeof HOOK_COUNTS)[number];
 
 interface Run {
@@ -29,8 +31,9 @@ export default function HookGeneratorPage({ params }: { params: { id: string } }
   const [projectName, setProjectName] = useState('');
   const [hasSaintGraal, setHasSaintGraal] = useState<boolean | null>(null);
   const [mode, setMode] = useState<Mode>('from_brand');
-  const [count, setCount] = useState<HookCount>(12);
+  const [count, setCount] = useState<HookCount>(6);
   const [script, setScript] = useState('');
+  const [videoAnalysis, setVideoAnalysis] = useState<VideoAnalysis | null>(null);
   const [instructions, setInstructions] = useState('');
   const [runs, setRuns] = useState<Run[]>([]);
 
@@ -47,6 +50,7 @@ export default function HookGeneratorPage({ params }: { params: { id: string } }
 
   const generate = async () => {
     if (mode === 'from_script' && !script.trim()) return;
+    if (mode === 'from_video' && !videoAnalysis) return;
     const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const newRun: Run = {
       id: runId,
@@ -65,7 +69,7 @@ export default function HookGeneratorPage({ params }: { params: { id: string } }
       const res = await fetch('/api/generate/hooks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: id, mode, count, script, instructions }),
+        body: JSON.stringify({ projectId: id, mode, count, script, instructions, videoAnalysis: mode === 'from_video' ? videoAnalysis : null }),
       });
       const data = await res.json();
       updateRun(runId, {
@@ -191,6 +195,19 @@ export default function HookGeneratorPage({ params }: { params: { id: string } }
                     Paste a script and generate hook variations for it.
                   </p>
                 </button>
+                <button
+                  onClick={() => setMode('from_video')}
+                  className={`w-full text-left px-3 py-3 rounded-md text-xs transition-colors border ${
+                    mode === 'from_video'
+                      ? 'bg-accent-gold/10 border-accent-gold/40 text-accent-gold'
+                      : 'border-bg-border text-text-secondary hover:text-text-primary hover:bg-bg-hover'
+                  }`}
+                >
+                  <p className="font-semibold mb-0.5">From Reference Video</p>
+                  <p className="text-text-muted text-[10px] leading-relaxed">
+                    Upload a winning hook (yours or a competitor&apos;s) — clone the mechanism, adapt the content to your brand.
+                  </p>
+                </button>
               </div>
             </div>
 
@@ -204,6 +221,20 @@ export default function HookGeneratorPage({ params }: { params: { id: string } }
                   value={script}
                   onChange={(e) => setScript(e.target.value)}
                 />
+              </div>
+            )}
+
+            {mode === 'from_video' && (
+              <div>
+                <label className="text-text-muted text-xs mb-1.5 block">Reference Hook Video</label>
+                <VideoReferenceInput
+                  analysis={videoAnalysis}
+                  onChange={setVideoAnalysis}
+                  emptyLabel="↑ Upload a hook video (yours or competitor)"
+                />
+                <p className="text-text-muted text-[10px] mt-1.5 leading-relaxed">
+                  We clone the mechanism (curiosity gap, contrarian, stat shock…) and adapt the wording + visuals to your brand. Product, claims and noun-specifics are swapped.
+                </p>
               </div>
             )}
 
@@ -250,7 +281,7 @@ export default function HookGeneratorPage({ params }: { params: { id: string } }
             <button
               onClick={generate}
               className="btn-primary w-full"
-              disabled={anyLoading || (mode === 'from_script' && !script.trim())}
+              disabled={anyLoading || (mode === 'from_script' && !script.trim()) || (mode === 'from_video' && !videoAnalysis)}
             >
               {anyLoading ? 'Generating hooks…' : `Generate ${count} Hook${count !== 1 ? 's' : ''}`}
             </button>
@@ -294,7 +325,7 @@ export default function HookGeneratorPage({ params }: { params: { id: string } }
                       <div>
                         <span className="text-text-muted text-xs uppercase tracking-widest">Hooks</span>
                         <span className="text-text-muted text-xs ml-3">
-                          {run.mode === 'from_brand' ? 'From brand knowledge' : 'From script'}
+                          {run.mode === 'from_brand' ? 'From brand knowledge' : run.mode === 'from_script' ? 'From script' : 'From reference video'}
                         </span>
                         {run.winnerKeys.size > 0 && (
                           <span className="text-accent-violet text-xs ml-3">
