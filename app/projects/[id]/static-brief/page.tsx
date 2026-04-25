@@ -743,7 +743,7 @@ function RunCard({
                                   prompt={promptText}
                                   initialImages={initialImagesForChild}
                                   initialModel={run.imageModel}
-                                  projectId={id}
+                                  projectId={projectId}
                                   generationId={run.generationId || undefined}
                                   assetType="static"
                                   assetKeySuffix={hashString(promptText)}
@@ -758,7 +758,7 @@ function RunCard({
                                 initialImages={initialImagesForChild}
                                 initialModel={run.imageModel}
                                 autoGenerateImageUrl={imgState.url}
-                                projectId={id}
+                                projectId={projectId}
                                 generationId={run.generationId || undefined}
                                 assetType="static"
                                 assetKeySuffix={hashString(promptText)}
@@ -771,7 +771,7 @@ function RunCard({
                                 prompt={promptText}
                                 initialImages={initialImagesForChild}
                                 initialModel={run.imageModel}
-                                projectId={id}
+                                projectId={projectId}
                                 generationId={run.generationId || undefined}
                                 assetType="static"
                                 assetKeySuffix={hashString(promptText)}
