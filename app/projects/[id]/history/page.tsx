@@ -16,8 +16,12 @@ interface Generation {
 
 const MODULE_LABELS: Record<string, { label: string; icon: string; color: string }> = {
   static: { label: 'Static Brief', icon: '▣', color: 'text-accent-gold border-accent-gold/30 bg-accent-gold/10' },
+  'static-image': { label: 'Generated Image', icon: '▤', color: 'text-accent-gold border-accent-gold/30 bg-accent-gold/10' },
   video: { label: 'Video Script', icon: '▶', color: 'text-accent-blue border-accent-blue/30 bg-accent-blue/10' },
   hook: { label: 'Hook Generator', icon: '⚡', color: 'text-accent-purple border-accent-purple/30 bg-accent-purple/10' },
+  iterate: { label: 'Iterate', icon: '↻', color: 'text-accent-violet border-accent-violet/30 bg-accent-violet/10' },
+  'iterate-video': { label: 'Iterate Video', icon: '↻', color: 'text-accent-violet border-accent-violet/30 bg-accent-violet/10' },
+  'clone-and-adapt-video': { label: 'Clone & Adapt Video', icon: '⎘', color: 'text-accent-blue border-accent-blue/30 bg-accent-blue/10' },
 };
 
 export default function HistoryPage({ params }: { params: { id: string } }) {
@@ -105,11 +109,23 @@ export default function HistoryPage({ params }: { params: { id: string } }) {
     try {
       const parsed = JSON.parse(inputs);
       if (module === 'static') return `${parsed.angle} · ${parsed.designFamily} · ${parsed.audience}`;
+      if (module === 'static-image') {
+        const modelLabel = (parsed.model || '').replace(/^fal-ai\//, '').replace(/\/edit$/, '');
+        const refTag = parsed.hasRef ? ` · ${parsed.refCount || 1} ref` : '';
+        return `${modelLabel}${refTag}`;
+      }
       if (module === 'video') return `${parsed.format} · ${parsed.length}`;
-      if (module === 'hook') return parsed.mode === 'from_script' ? 'From script' : 'From brand';
+      if (module === 'hook') {
+        if (parsed.mode === 'from_script') return 'From script';
+        if (parsed.mode === 'from_video') return `From video · ${parsed.videoSource || 'competitor'}`;
+        return 'From brand';
+      }
       return '';
     } catch { return ''; }
   };
+
+  // For module === 'static-image', `output` is the R2/Fal URL of the image.
+  const isImageModule = (module: string) => module === 'static-image';
 
   return (
     <div className="flex h-screen bg-bg-base overflow-hidden">
@@ -180,6 +196,14 @@ export default function HistoryPage({ params }: { params: { id: string } }) {
                           title="Select for bulk delete"
                         />
                         {gen.isWinner && <span className="text-accent-gold text-xs">★</span>}
+                        {isImageModule(gen.module) && gen.output && (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img
+                            src={gen.output}
+                            alt=""
+                            className="w-9 h-9 object-cover rounded border border-bg-border shrink-0"
+                          />
+                        )}
                         <span className={`text-xs font-medium px-2 py-0.5 rounded border ${meta.color}`}>
                           {meta.icon} {meta.label}
                         </span>
@@ -220,13 +244,15 @@ export default function HistoryPage({ params }: { params: { id: string } }) {
                             >
                               {gen.isWinner ? '★ Winner' : '☆ Mark Winner'}
                             </button>
-                            <button
-                              onClick={() => getVariations(gen.id)}
-                              className="btn-secondary text-xs px-3 py-1"
-                              disabled={variationsLoading === gen.id}
-                            >
-                              {variationsLoading === gen.id ? 'Generating…' : '5 Variations'}
-                            </button>
+                            {!isImageModule(gen.module) && (
+                              <button
+                                onClick={() => getVariations(gen.id)}
+                                className="btn-secondary text-xs px-3 py-1"
+                                disabled={variationsLoading === gen.id}
+                              >
+                                {variationsLoading === gen.id ? 'Generating…' : '5 Variations'}
+                              </button>
+                            )}
                             {gen.isWinner && (
                               <Link
                                 href={`/projects/${id}/iterate`}
@@ -246,9 +272,43 @@ export default function HistoryPage({ params }: { params: { id: string } }) {
                             </button>
                           </div>
                         </div>
-                        <div className="p-5 result-content max-h-96 overflow-y-auto">
-                          <ReactMarkdown>{gen.output}</ReactMarkdown>
-                        </div>
+                        {isImageModule(gen.module) ? (
+                          <div className="p-5 flex flex-col items-center gap-3">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <a href={gen.output} target="_blank" rel="noreferrer" title="Open full size">
+                              <img
+                                src={gen.output}
+                                alt="generated"
+                                className="max-h-96 w-auto rounded-md border border-bg-border hover:opacity-90 transition-opacity"
+                              />
+                            </a>
+                            {(() => {
+                              try {
+                                const parsed = JSON.parse(gen.inputs);
+                                return (
+                                  <div className="w-full max-w-2xl text-xs text-text-secondary space-y-1">
+                                    {parsed.prompt && (
+                                      <div>
+                                        <span className="text-text-muted uppercase tracking-widest text-[10px]">Prompt</span>
+                                        <p className="whitespace-pre-wrap mt-0.5">{parsed.prompt}</p>
+                                      </div>
+                                    )}
+                                    {parsed.feedback && (
+                                      <div>
+                                        <span className="text-text-muted uppercase tracking-widest text-[10px]">Feedback</span>
+                                        <p className="whitespace-pre-wrap mt-0.5">{parsed.feedback}</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              } catch { return null; }
+                            })()}
+                          </div>
+                        ) : (
+                          <div className="p-5 result-content max-h-96 overflow-y-auto">
+                            <ReactMarkdown>{gen.output}</ReactMarkdown>
+                          </div>
+                        )}
 
                         {variationsOutput[gen.id] && (
                           <div className="border-t border-bg-border">

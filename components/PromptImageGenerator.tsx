@@ -143,6 +143,8 @@ export default function PromptImageGenerator({
           model,
           referenceImages: sendRefs.length > 0 ? sendRefs : undefined,
           feedback: withFeedback ? feedback : undefined,
+          // Sent so the API can persist a Generation row (history thumbnail).
+          projectId,
         }),
       });
 

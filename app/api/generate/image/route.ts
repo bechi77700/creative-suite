@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { fal } from '@fal-ai/client';
+import { mirrorRemoteImageToR2, isR2Configured } from '@/lib/r2';
+import { prisma } from '@/lib/prisma';
 
 export const maxDuration = 120;
 
@@ -55,6 +57,7 @@ export async function POST(req: Request) {
       referenceMimeType,
       referenceImages,
       feedback,
+      projectId,
     }: {
       prompt: string;
       model?: string;
@@ -63,6 +66,9 @@ export async function POST(req: Request) {
       // New preferred shape: array of {base64, mimeType}.
       referenceImages?: Array<{ base64: string; mimeType?: string }>;
       feedback?: string;
+      // When provided, the generated image is persisted as a Generation row
+      // (module='static-image') so it shows up in the History page.
+      projectId?: string;
     } = body;
 
     if (!prompt?.trim()) {
@@ -126,16 +132,55 @@ export async function POST(req: Request) {
 
     // Fal returns different shapes depending on the model — normalize
     const data = result.data as { images?: Array<{ url: string }>; image?: { url: string } };
-    const imageUrl = data.images?.[0]?.url || data.image?.url;
+    const falUrl = data.images?.[0]?.url || data.image?.url;
 
-    if (!imageUrl) {
+    if (!falUrl) {
       return NextResponse.json(
         { error: 'No image returned by Fal.ai', raw: result.data },
         { status: 500 },
       );
     }
 
-    return NextResponse.json({ imageUrl, model: modelConfig.id });
+    // Mirror the Fal-hosted image to our own R2 bucket so we have a
+    // permanent copy. If R2 isn't configured we keep the Fal URL.
+    const r2Prefix = projectId ? `projects/${projectId}` : 'images';
+    const persistedUrl = await mirrorRemoteImageToR2(falUrl, r2Prefix);
+    const mirrored = persistedUrl !== falUrl;
+    if (mirrored) {
+      console.log(`[generate/image] mirrored to R2: ${persistedUrl}`);
+    } else if (!isR2Configured()) {
+      console.log('[generate/image] R2 not configured — returning Fal URL directly');
+    }
+
+    // Persist a Generation row so the image shows up in the History page.
+    // We only do this when a projectId is provided (otherwise we have nowhere
+    // to attach it). Failures here must NOT break the response — if the DB
+    // insert fails, the user still gets their image back.
+    let generationId: string | undefined;
+    if (projectId) {
+      try {
+        const gen = await prisma.generation.create({
+          data: {
+            projectId,
+            module: 'static-image',
+            inputs: JSON.stringify({
+              prompt,
+              model: modelConfig.id,
+              hasRef,
+              refCount: refs.length,
+              feedback: feedback || undefined,
+              mirrored,
+            }),
+            output: persistedUrl,
+          },
+        });
+        generationId = gen.id;
+      } catch (dbErr) {
+        console.warn('[generate/image] failed to persist Generation row:', dbErr);
+      }
+    }
+
+    return NextResponse.json({ imageUrl: persistedUrl, model: modelConfig.id, generationId, mirrored });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[generate/image] ERROR:', message);
