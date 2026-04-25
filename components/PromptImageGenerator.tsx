@@ -165,21 +165,20 @@ export default function PromptImageGenerator({
     setLoading(false);
   };
 
-  const downloadImage = async () => {
+  const downloadImage = () => {
     if (!imageUrl) return;
-    try {
-      const res = await fetch(imageUrl);
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `generated-${Date.now()}.png`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      // fallback: open in new tab
-      window.open(imageUrl, '_blank');
-    }
+    // Use our server-side proxy so the browser sees a same-origin response
+    // with Content-Disposition: attachment — triggers a real download dialog
+    // instead of opening the image in a new tab (which is what cross-origin
+    // R2 / Fal URLs do otherwise).
+    const filename = `generated-${Date.now()}.png`;
+    const proxyUrl = `/api/download-image?url=${encodeURIComponent(imageUrl)}&filename=${encodeURIComponent(filename)}`;
+    const a = document.createElement('a');
+    a.href = proxyUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   return (
