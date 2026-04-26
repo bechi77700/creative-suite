@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getAnthropic, MODEL, GENERATION_RULES } from '@/lib/anthropic';
+import { getAnthropic, MODEL_SMART, MODEL_FAST, GENERATION_RULES } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
 import type { VideoAnalysis } from '@/lib/gemini-video';
@@ -215,8 +215,9 @@ PROHIBITIONS (auto-fail):
 
     const maxTokens = Math.min(8000, Math.max(2000, count * 280));
 
+    // from_video = cloning a reference, execution work → Sonnet.
     const response = await getAnthropic().messages.create({
-      model: MODEL,
+      model: MODEL_FAST,
       max_tokens: maxTokens,
       messages: [{
         role: 'user',
@@ -284,8 +285,10 @@ No preamble. Start directly with Hook #1.`;
   // ~200 tokens per hook is a generous budget for the structured output above.
   const maxTokens = Math.min(8000, Math.max(1500, count * 220));
 
+  // from_brand = pure strategy (Opus); from_script = adapt existing copy (Sonnet).
+  const modelToUse = mode === 'from_brand' ? MODEL_SMART : MODEL_FAST;
   const response = await getAnthropic().messages.create({
-    model: MODEL,
+    model: modelToUse,
     max_tokens: maxTokens,
     messages: [{
       role: 'user',

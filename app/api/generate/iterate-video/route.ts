@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { getAnthropic, MODEL, GENERATION_RULES } from '@/lib/anthropic';
+import { getAnthropic, MODEL_FAST, GENERATION_RULES } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
 import type { VideoAnalysis } from '@/lib/gemini-video';
@@ -199,7 +199,7 @@ ${Array.from({ length: n }, (_, i) => `
         let fullText = '';
         try {
           const messageStream = anthropic.messages.stream({
-            model: MODEL,
+            model: MODEL_FAST,
             max_tokens: 3000 + n * 800,
             messages: [{
               role: 'user',

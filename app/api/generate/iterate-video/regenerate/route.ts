@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getAnthropic, MODEL, GENERATION_RULES } from '@/lib/anthropic';
+import { getAnthropic, MODEL_FAST, GENERATION_RULES } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
 
@@ -83,7 +83,7 @@ OUTPUT — exactly this structure, nothing else:
 **What changed vs the previous version:** [one sentence]`;
 
     const response = await getAnthropic().messages.create({
-      model: MODEL,
+      model: MODEL_FAST,
       max_tokens: 2000,
       messages: [{
         role: 'user',

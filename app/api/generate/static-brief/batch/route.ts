@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getAnthropic, MODEL, GENERATION_RULES, STATIC_PRODUCT_RULE, STATIC_VISUAL_DIRECTION_RULE } from '@/lib/anthropic';
+import { getAnthropic, MODEL_FAST, GENERATION_RULES, STATIC_PRODUCT_RULE, STATIC_VISUAL_DIRECTION_RULE } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
 
@@ -72,7 +72,7 @@ Use the exact output structure:
 `;
 
     const response = await getAnthropic().messages.create({
-      model: MODEL,
+      model: MODEL_FAST,
       max_tokens: 1500,
       messages: [{
         role: 'user',

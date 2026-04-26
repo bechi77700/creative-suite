@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getAnthropic, MODEL, GENERATION_RULES, STATIC_PRODUCT_RULE } from '@/lib/anthropic';
+import { getAnthropic, MODEL_FAST, GENERATION_RULES, STATIC_PRODUCT_RULE } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, type KnowledgeModule } from '@/lib/knowledge';
 
@@ -55,7 +55,7 @@ Label each variation clearly:
 ...and so on through VARIATION 5.`;
 
   const response = await getAnthropic().messages.create({
-    model: MODEL,
+    model: MODEL_FAST,
     max_tokens: 4000,
     messages: [{
       role: 'user',
