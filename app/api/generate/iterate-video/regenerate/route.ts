@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL, GENERATION_RULES } from '@/lib/anthropic';
+import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
+import { buildCachedUserContent } from '@/lib/prompt-cache';
 
 export const maxDuration = 300;
 
@@ -29,10 +31,10 @@ export async function POST(req: Request) {
     ]);
     if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
 
-    const brandContext = project.documents.map((d) => `[${d.type.toUpperCase()} — ${d.name}]`).join('\n');
-    const knowledgeContext = globalKnowledge.map((k) => `[${k.category.toUpperCase()} — ${k.name}]`).join('\n');
+    const brandContext = buildBrandDocumentsBlock(project.documents);
+    const knowledgeContext = buildGlobalKnowledgeBlock(globalKnowledge);
 
-    const prompt = `${GENERATION_RULES}
+    const stablePrefix = `${GENERATION_RULES}
 
 You are regenerating ONE video-script iteration based on user feedback.
 
@@ -40,9 +42,9 @@ BRAND: ${project.name}
 GLOBAL KNOWLEDGE BASE:
 ${knowledgeContext || '(none)'}
 BRAND DOCUMENTS:
-${brandContext || '(none)'}
+${brandContext || '(none)'}`;
 
-─────────────────────────────────────────────
+    const variableSuffix = `─────────────────────────────────────────────
 ORIGINAL WINNING SCRIPT (the source of truth — keep its DNA)
 ─────────────────────────────────────────────
 ${originalScript.trim()}
@@ -83,7 +85,10 @@ OUTPUT — exactly this structure, nothing else:
     const response = await getAnthropic().messages.create({
       model: MODEL,
       max_tokens: 2000,
-      messages: [{ role: 'user', content: prompt }],
+      messages: [{
+        role: 'user',
+        content: buildCachedUserContent(stablePrefix, variableSuffix),
+      }],
     });
 
     const output = (response.content[0] as { type: string; text: string }).text;
