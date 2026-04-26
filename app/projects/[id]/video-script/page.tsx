@@ -669,10 +669,25 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
           {mode === 'scratch' && (
           <>
           {/* Angles */}
-          {anglesLoading && (
+          {anglesLoading && !angles && (
             <div className="card p-8 flex items-center justify-center gap-3">
               <div className="w-6 h-6 border-2 border-accent-gold/30 border-t-accent-gold rounded-full animate-spin" />
               <span className="text-text-secondary text-sm">Proposing angles from brand knowledge…</span>
+            </div>
+          )}
+
+          {/* While streaming: show raw markdown progressively */}
+          {anglesLoading && angles && (
+            <div className="card">
+              <div className="px-4 py-3 border-b border-bg-border flex items-center gap-3">
+                <div className="w-4 h-4 border-2 border-accent-gold/30 border-t-accent-gold rounded-full animate-spin" />
+                <span className="text-text-muted text-xs uppercase tracking-widest">
+                  Streaming angles… checkboxes will appear when done
+                </span>
+              </div>
+              <div className="p-5 result-content">
+                <ReactMarkdown>{angles}</ReactMarkdown>
+              </div>
             </div>
           )}
 
