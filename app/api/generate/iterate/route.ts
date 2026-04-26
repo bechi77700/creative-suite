@@ -1,6 +1,5 @@
 import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL, GENERATION_RULES, STATIC_PRODUCT_RULE } from '@/lib/anthropic';
-import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 
 export const maxDuration = 300;
@@ -92,8 +91,8 @@ export async function POST(req: Request) {
       });
     }
 
-    const brandContext = buildBrandDocumentsBlock(project.documents);
-    const knowledgeContext = buildGlobalKnowledgeBlock(globalKnowledge);
+    const brandContext = project.documents.map((d) => `[${d.type.toUpperCase()} — ${d.name}]`).join('\n');
+    const knowledgeContext = globalKnowledge.map((k) => `[${k.category.toUpperCase()} — ${k.name}]`).join('\n');
     const n = Math.max(1, Math.min(20, count || 3));
 
     const strategyBlock = strategies

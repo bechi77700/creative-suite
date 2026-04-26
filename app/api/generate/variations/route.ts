@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL, GENERATION_RULES, STATIC_PRODUCT_RULE } from '@/lib/anthropic';
-import { buildGlobalKnowledgeBlock } from '@/lib/knowledge';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 
 export async function POST(req: Request) {
@@ -15,7 +14,7 @@ export async function POST(req: Request) {
   if (!original) return NextResponse.json({ error: 'Generation not found' }, { status: 404 });
 
   const globalKnowledge = await prisma.globalKnowledge.findMany();
-  const knowledgeContext = buildGlobalKnowledgeBlock(globalKnowledge);
+  const knowledgeContext = globalKnowledge.map((k) => `[${k.category.toUpperCase()} — ${k.name}]`).join('\n');
 
   const moduleLabel =
     original.module === 'static' ? 'STATIC AD BRIEF' :

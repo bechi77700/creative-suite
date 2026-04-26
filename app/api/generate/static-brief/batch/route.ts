@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL, GENERATION_RULES, STATIC_PRODUCT_RULE } from '@/lib/anthropic';
-import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 
 interface BatchRow {
@@ -28,8 +27,8 @@ export async function POST(req: Request) {
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
 
   const globalKnowledge = await prisma.globalKnowledge.findMany();
-  const brandContext = buildBrandDocumentsBlock(project.documents);
-  const knowledgeContext = buildGlobalKnowledgeBlock(globalKnowledge);
+  const brandContext = project.documents.map((d) => `[${d.type.toUpperCase()} — ${d.name}]`).join('\n');
+  const knowledgeContext = globalKnowledge.map((k) => `[${k.category.toUpperCase()} — ${k.name}]`).join('\n');
 
   const results: { version: string; output: string; generationId: string }[] = [];
 

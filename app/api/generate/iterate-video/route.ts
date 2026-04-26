@@ -1,6 +1,5 @@
 import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL, GENERATION_RULES } from '@/lib/anthropic';
-import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import type { VideoAnalysis } from '@/lib/gemini-video';
 
@@ -107,8 +106,8 @@ export async function POST(req: Request) {
       });
     }
 
-    const brandContext = buildBrandDocumentsBlock(project.documents);
-    const knowledgeContext = buildGlobalKnowledgeBlock(globalKnowledge);
+    const brandContext = project.documents.map((d) => `[${d.type.toUpperCase()} — ${d.name}]`).join('\n');
+    const knowledgeContext = globalKnowledge.map((k) => `[${k.category.toUpperCase()} — ${k.name}]`).join('\n');
     const n = Math.max(1, Math.min(20, count || 4));
 
     // Mode: Auto vs User-directed (per SOP)

@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL, GENERATION_RULES } from '@/lib/anthropic';
-import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 
 export async function POST(req: Request) {
@@ -19,8 +18,8 @@ export async function POST(req: Request) {
   }
 
   const globalKnowledge = await prisma.globalKnowledge.findMany();
-  const brandContext = buildBrandDocumentsBlock(project.documents);
-  const knowledgeContext = buildGlobalKnowledgeBlock(globalKnowledge);
+  const brandContext = project.documents.map((d) => `[${d.type.toUpperCase()} — ${d.name}]`).join('\n');
+  const knowledgeContext = globalKnowledge.map((k) => `[${k.category.toUpperCase()} — ${k.name}]`).join('\n');
 
   const saintGraalContent = saintGraal.content
     ? Buffer.from(saintGraal.content, 'base64').toString('utf-8')

@@ -1,9 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL, GENERATION_RULES, STATIC_PRODUCT_RULE } from '@/lib/anthropic';
-import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
-import { buildConceptInstruction, type SelectedConcept } from '@/lib/static-ad-concepts';
 
 export const maxDuration = 300;
 
@@ -37,7 +35,6 @@ export async function POST(req: Request) {
       imageBase64,
       imageMimeType,
       competitorImages,
-      concept,
     } = body as {
       projectId: string;
       product: string;
@@ -48,7 +45,6 @@ export async function POST(req: Request) {
       imageBase64?: string;
       imageMimeType?: string;
       competitorImages?: Array<{ base64: string; mimeType?: string }>;
-      concept?: SelectedConcept | null;
     };
 
     // Normalize competitor screenshots: new array shape + legacy single fields
@@ -79,8 +75,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const brandContext = buildBrandDocumentsBlock(project.documents);
-    const knowledgeContext = buildGlobalKnowledgeBlock(globalKnowledge);
+    const brandContext = project.documents.map((d) => `[${d.type.toUpperCase()} — ${d.name}]`).join('\n');
+    const knowledgeContext = globalKnowledge.map((k) => `[${k.category.toUpperCase()} — ${k.name}]`).join('\n');
     const n = Math.max(1, parseInt(count) || 1);
 
     const diversityRule = n > 1 ? `
@@ -176,18 +172,12 @@ ${Array.from({ length: n }, (_, i) => `
         ? `MARKETING ANGLE: "${angle}" — all ${n} prompts must be on this angle, each with a completely different visual format.`
         : `MARKETING ANGLE: Not specified — you choose the most powerful angle(s) based on the brand knowledge and product. If generating multiple prompts, you may vary angles to find the strongest.`;
 
-      // Concept selection only applies to scratch mode (clone mode is dictated
-      // by the competitor screenshot's structure, so a manual concept would
-      // conflict with the audit-then-clone flow).
-      const conceptBlock = buildConceptInstruction(concept);
-
       variableSuffix = `You are the world's best creative strategist for Meta Ads cold traffic on the US market.
 
 PRODUCT: ${product}
 ${angleInstruction}
 ${additionalContext ? `ADDITIONAL CONTEXT: ${additionalContext}` : ''}
-${conceptBlock}
-${conceptBlock ? '' : diversityRule}
+${diversityRule}
 
 ─────────────────────────────────────────────
 TASK
@@ -269,7 +259,7 @@ ${Array.from({ length: n }, (_, i) => `
             data: {
               projectId,
               module: 'static',
-              inputs: JSON.stringify({ product, count: n, mode, angle: angle || null, additionalContext, concept: concept || null }),
+              inputs: JSON.stringify({ product, count: n, mode, angle: angle || null, additionalContext }),
               output: fullText,
             },
           });
