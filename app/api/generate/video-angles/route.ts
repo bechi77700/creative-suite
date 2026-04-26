@@ -4,6 +4,8 @@ import { getAnthropic, MODEL, GENERATION_RULES } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
 
+export const maxDuration = 300;
+
 export async function POST(req: Request) {
   const { projectId, format, length } = await req.json();
 

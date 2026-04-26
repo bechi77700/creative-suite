@@ -12,6 +12,8 @@ interface BatchRow {
   version: string;
 }
 
+export const maxDuration = 300;
+
 export async function POST(req: Request) {
   const body = await req.json();
   const { projectId, product, format, rows } = body as {

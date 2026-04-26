@@ -4,6 +4,8 @@ import { getAnthropic, MODEL, GENERATION_RULES, STATIC_PRODUCT_RULE } from '@/li
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, type KnowledgeModule } from '@/lib/knowledge';
 
+export const maxDuration = 300;
+
 export async function POST(req: Request) {
   const body = await req.json();
   const { generationId } = body;
