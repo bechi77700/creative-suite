@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import Logo from '@/components/Logo';
 
 interface NavItem {
   href: string;
@@ -127,7 +128,7 @@ export default function Sidebar({ projectId, projectName }: SidebarProps) {
           </svg>
         </button>
         <Link href="/" className="flex items-center gap-2">
-          <div className="logo-mark w-6 h-6 text-xs">C</div>
+          <Logo size={22} noGlow />
           <span className="text-text-primary font-semibold text-sm tracking-tight">Creative Suite</span>
         </Link>
         <span className="w-9" />
@@ -154,7 +155,7 @@ export default function Sidebar({ projectId, projectName }: SidebarProps) {
       {/* Logo */}
       <div className="px-4 py-5 border-b border-bg-border flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2.5 group">
-          <div className="logo-mark">C</div>
+          <Logo size={28} className="transition-transform group-hover:scale-105" />
           <span className="text-text-primary font-semibold text-base tracking-tight group-hover:text-accent-violet transition-colors">
             Creative Suite
           </span>

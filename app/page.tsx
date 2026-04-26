@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
+import Logo from '@/components/Logo';
 
 interface Project {
   id: string;
@@ -110,7 +111,7 @@ export default function HomePage() {
             </div>
           ) : projects.length === 0 ? (
             <div className="card p-16 text-center">
-              <div className="logo-mark mx-auto mb-4 w-12 h-12 text-xl">C</div>
+              <div className="flex justify-center mb-4"><Logo size={48} /></div>
               <p className="text-text-primary font-medium">No brand projects yet</p>
               <p className="text-text-muted text-sm mt-1">Create your first project to get started.</p>
             </div>
