@@ -276,7 +276,7 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
           additionalContext: mode === 'clone' ? modeAContext : modeBContext,
           competitorImages: competitorRefs,
           concept,
-          funnelStage,
+          funnelStage: mode === 'scratch' ? funnelStage : null,
         }),
       });
 
@@ -460,9 +460,6 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
                     onChange={(e) => setModeAContext(e.target.value)}
                   />
                 </div>
-
-                {/* Funnel stage (TOFU / MOFU / BOFU) — optional. */}
-                <FunnelStageSelector value={funnelStage} onChange={setFunnelStage} />
               </>
             )}
 

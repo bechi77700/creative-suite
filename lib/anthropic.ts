@@ -6,7 +6,7 @@ export function getAnthropic() {
   return new Anthropic({ apiKey });
 }
 
-export const MODEL = 'claude-sonnet-4-6';
+export const MODEL = 'claude-opus-4-7';
 
 export const GENERATION_RULES = `
 GENERATION RULES — MANDATORY FOR ALL OUTPUTS:

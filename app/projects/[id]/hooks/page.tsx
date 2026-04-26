@@ -7,8 +7,6 @@ import ReactMarkdown from 'react-markdown';
 import { addWinner, removeWinner, parseNumberedBlocks } from '@/lib/winners';
 import VideoReferenceInput from '@/components/VideoReferenceInput';
 import type { VideoAnalysis } from '@/lib/gemini-video';
-import FunnelStageSelector from '@/components/FunnelStageSelector';
-import type { FunnelStage } from '@/lib/funnel-stage';
 
 type Mode = 'from_script' | 'from_brand' | 'from_video';
 
@@ -38,7 +36,6 @@ export default function HookGeneratorPage({ params }: { params: { id: string } }
   const [videoAnalysis, setVideoAnalysis] = useState<VideoAnalysis | null>(null);
   const [videoSource, setVideoSource] = useState<'own' | 'competitor'>('competitor');
   const [instructions, setInstructions] = useState('');
-  const [funnelStage, setFunnelStage] = useState<FunnelStage | null>(null);
   const [runs, setRuns] = useState<Run[]>([]);
 
   useEffect(() => {
@@ -81,7 +78,6 @@ export default function HookGeneratorPage({ params }: { params: { id: string } }
           instructions,
           videoAnalysis: mode === 'from_video' ? videoAnalysis : null,
           videoSource: mode === 'from_video' ? videoSource : null,
-          funnelStage,
         }),
       });
       const data = await res.json();
@@ -310,8 +306,6 @@ export default function HookGeneratorPage({ params }: { params: { id: string } }
                 ))}
               </div>
             </div>
-
-            <FunnelStageSelector value={funnelStage} onChange={setFunnelStage} />
 
             <div>
               <label className="text-text-muted text-xs mb-1.5 block uppercase tracking-widest">Instructions <span className="normal-case text-text-muted">(optional)</span></label>
