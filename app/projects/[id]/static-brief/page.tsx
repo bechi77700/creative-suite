@@ -7,6 +7,7 @@ import PromptImageGenerator, { IMAGE_MODELS } from '@/components/PromptImageGene
 import IteratePanel from '@/components/IteratePanel';
 import MultiImageInput, { RefImage } from '@/components/MultiImageInput';
 import ReactMarkdown from 'react-markdown';
+import { STATIC_AD_FAMILIES, SEASONAL_FAMILY, type SelectedConcept } from '@/lib/static-ad-concepts';
 
 type Mode = 'clone' | 'scratch';
 
@@ -106,6 +107,31 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
   // Mode B inputs (From Scratch)
   const [angle, setAngle] = useState('');
   const [modeBContext, setModeBContext] = useState('');
+
+  // Static ad concept selector (scratch mode only).
+  // Single-select. Picking a family clears the previous variant.
+  // Picking the same family again deselects everything (toggle).
+  const [conceptFamily, setConceptFamily] = useState<string | null>(null);
+  const [conceptVariant, setConceptVariant] = useState<string | null>(null);
+  const [seasonalEvent, setSeasonalEvent] = useState('');
+
+  const selectedFamily = STATIC_AD_FAMILIES.find((f) => f.name === conceptFamily) || null;
+
+  const pickFamily = (name: string) => {
+    if (conceptFamily === name) {
+      setConceptFamily(null);
+      setConceptVariant(null);
+      setSeasonalEvent('');
+    } else {
+      setConceptFamily(name);
+      setConceptVariant(null);
+      if (name !== SEASONAL_FAMILY) setSeasonalEvent('');
+    }
+  };
+
+  const pickVariant = (name: string) => {
+    setConceptVariant((prev) => (prev === name ? null : name));
+  };
 
   // Product reference image(s) (used for image generation, both modes)
   const [productRefImages, setProductRefImages] = useState<RefImage[]>([]);
@@ -220,6 +246,18 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
       ? competitorImages.map((r) => ({ base64: r.base64, mimeType: r.mimeType }))
       : [];
 
+    // Concept only applies to scratch mode and is omitted otherwise.
+    let concept: SelectedConcept | null = null;
+    if (mode === 'scratch' && conceptFamily) {
+      concept = {
+        family: conceptFamily,
+        ...(conceptVariant ? { variant: conceptVariant } : {}),
+        ...(conceptFamily === SEASONAL_FAMILY && seasonalEvent.trim()
+          ? { seasonalEvent: seasonalEvent.trim() }
+          : {}),
+      };
+    }
+
     try {
       const res = await fetch('/api/generate/static-brief', {
         method: 'POST',
@@ -232,6 +270,7 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
           angle: mode === 'scratch' ? angle : '',
           additionalContext: mode === 'clone' ? modeAContext : modeBContext,
           competitorImages: competitorRefs,
+          concept,
         }),
       });
 
@@ -442,6 +481,68 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
                     value={angle}
                     onChange={(e) => setAngle(e.target.value)}
                   />
+                </div>
+
+                {/* Static ad concept selector — chips. Single-select.
+                    Picking a family reveals its variants (chips, second row).
+                    Picking Seasonal reveals a free-text event input. */}
+                <div>
+                  <label className="text-text-muted text-xs mb-1.5 block">
+                    Concept
+                    <span className="text-text-muted ml-1 font-normal opacity-60">— optional, AI picks freely if empty</span>
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {STATIC_AD_FAMILIES.map((f) => {
+                      const isSelected = conceptFamily === f.name;
+                      return (
+                        <button
+                          key={f.name}
+                          type="button"
+                          onClick={() => pickFamily(f.name)}
+                          className={`text-[11px] px-2.5 py-1 rounded border transition-colors ${
+                            isSelected
+                              ? 'bg-accent-gold text-bg-base border-accent-gold'
+                              : 'border-bg-border text-text-secondary hover:border-text-muted hover:text-text-primary'
+                          }`}
+                        >
+                          {f.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Variant chips (second row) — only when a family is selected */}
+                  {selectedFamily && selectedFamily.variants.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2 pl-2 border-l-2 border-accent-gold/40">
+                      {selectedFamily.variants.map((v) => {
+                        const isSelected = conceptVariant === v;
+                        return (
+                          <button
+                            key={v}
+                            type="button"
+                            onClick={() => pickVariant(v)}
+                            className={`text-[11px] px-2.5 py-1 rounded border transition-colors ${
+                              isSelected
+                                ? 'bg-accent-gold/20 border-accent-gold/60 text-accent-gold'
+                                : 'border-bg-border text-text-muted hover:border-accent-gold/40 hover:text-text-primary'
+                            }`}
+                          >
+                            {v}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Seasonal free-text event */}
+                  {conceptFamily === SEASONAL_FAMILY && (
+                    <input
+                      className="input-field text-xs mt-2"
+                      placeholder={`e.g. "Black Friday", "Mother's Day", "New Year"`}
+                      value={seasonalEvent}
+                      onChange={(e) => setSeasonalEvent(e.target.value)}
+                    />
+                  )}
                 </div>
 
                 <div>

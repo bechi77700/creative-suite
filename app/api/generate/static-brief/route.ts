@@ -1,6 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL, GENERATION_RULES, STATIC_PRODUCT_RULE } from '@/lib/anthropic';
+import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
+import { buildCachedUserContent } from '@/lib/prompt-cache';
+import { buildConceptInstruction, type SelectedConcept } from '@/lib/static-ad-concepts';
 
 export const maxDuration = 300;
 
@@ -15,15 +18,6 @@ const NANOBANANA_FORMAT = `NANOBANANA PROMPT FORMAT — use exactly this structu
 + [Specific Text: "Exact headline or claim" in "Font style description"]
 + [Clarity & Legibility Constraints]
 --ar [Aspect Ratio — choose freely: 1:1 / 4:5 / 9:16 — pick what best serves the format]`;
-
-function buildKnowledgeContext(globalKnowledge: { category: string; name: string }[]) {
-  const staticAds = globalKnowledge.filter((k) => k.category === 'static_ads');
-  const rest = globalKnowledge.filter((k) => k.category !== 'static_ads');
-  return [
-    ...staticAds.map((k) => `[STATIC ADS REFERENCE — ${k.name}]`),
-    ...rest.map((k) => `[${k.category.toUpperCase()} — ${k.name}]`),
-  ].join('\n');
-}
 
 // Helper to send an SSE event
 function sse(event: string, data: unknown) {
@@ -43,6 +37,7 @@ export async function POST(req: Request) {
       imageBase64,
       imageMimeType,
       competitorImages,
+      concept,
     } = body as {
       projectId: string;
       product: string;
@@ -53,6 +48,7 @@ export async function POST(req: Request) {
       imageBase64?: string;
       imageMimeType?: string;
       competitorImages?: Array<{ base64: string; mimeType?: string }>;
+      concept?: SelectedConcept | null;
     };
 
     // Normalize competitor screenshots: new array shape + legacy single fields
@@ -83,8 +79,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const brandContext = project.documents.map((d) => `[${d.type.toUpperCase()} — ${d.name}]`).join('\n');
-    const knowledgeContext = buildKnowledgeContext(globalKnowledge);
+    const brandContext = buildBrandDocumentsBlock(project.documents);
+    const knowledgeContext = buildGlobalKnowledgeBlock(globalKnowledge);
     const n = Math.max(1, parseInt(count) || 1);
 
     const diversityRule = n > 1 ? `
@@ -96,8 +92,22 @@ MANDATORY DIVERSITY RULES — batch of ${n} prompts:
 - If angle is the same across all, the FORMAT must make each one feel like a different ad` : '';
 
     // ── Build the prompt for the chosen mode ──
-    let promptText: string;
-    let visionContent: Anthropic.MessageParam['content'] | null = null;
+    // Split into stablePrefix (cacheable: rules + KB + brand docs + project name)
+    // and variableSuffix (per-call: product/angle/count/task).
+    const stablePrefix = `${GENERATION_RULES}
+
+${NANOBANANA_FORMAT}
+${STATIC_PRODUCT_RULE}
+
+BRAND: ${project.name}
+
+GLOBAL KNOWLEDGE BASE:
+${knowledgeContext || '(none uploaded yet)'}
+
+BRAND DOCUMENTS:
+${brandContext || '(none uploaded yet)'}`;
+
+    let variableSuffix: string;
 
     if (mode === 'clone') {
       if (competitorRefs.length === 0) {
@@ -111,22 +121,10 @@ MANDATORY DIVERSITY RULES — batch of ${n} prompts:
         ? 'a competitor ad screenshot'
         : `${competitorRefs.length} competitor ad screenshots`;
 
-      promptText = `${GENERATION_RULES}
+      variableSuffix = `You are the world's best creative strategist for Meta Ads. You have been given ${screenshotDescriptor}.${competitorRefs.length > 1 ? ' Audit each one separately, then synthesize the strongest patterns shared across them when generating prompts.' : ''}
 
-You are the world's best creative strategist for Meta Ads. You have been given ${screenshotDescriptor}.${competitorRefs.length > 1 ? ' Audit each one separately, then synthesize the strongest patterns shared across them when generating prompts.' : ''}
-
-BRAND: ${project.name}
 PRODUCT: ${product}
 ${additionalContext ? `OPTIONAL INSTRUCTIONS FROM USER: ${additionalContext}` : ''}
-
-GLOBAL KNOWLEDGE BASE:
-${knowledgeContext || '(none uploaded yet)'}
-
-BRAND DOCUMENTS:
-${brandContext || '(none uploaded yet)'}
-
-${NANOBANANA_FORMAT}
-${STATIC_PRODUCT_RULE}
 ${diversityRule}
 
 ─────────────────────────────────────────────
@@ -173,41 +171,23 @@ ${Array.from({ length: n }, (_, i) => `
 
 **Rationale:** [one sentence — what from the competitor structure this preserves and why]
 `).join('\n')}`;
-
-      visionContent = [
-        ...competitorRefs.map((r) => ({
-          type: 'image' as const,
-          source: {
-            type: 'base64' as const,
-            media_type: r.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-            data: r.base64,
-          },
-        })),
-        { type: 'text' as const, text: promptText },
-      ];
     } else {
       const angleInstruction = angle?.trim()
         ? `MARKETING ANGLE: "${angle}" — all ${n} prompts must be on this angle, each with a completely different visual format.`
         : `MARKETING ANGLE: Not specified — you choose the most powerful angle(s) based on the brand knowledge and product. If generating multiple prompts, you may vary angles to find the strongest.`;
 
-      promptText = `${GENERATION_RULES}
+      // Concept selection only applies to scratch mode (clone mode is dictated
+      // by the competitor screenshot's structure, so a manual concept would
+      // conflict with the audit-then-clone flow).
+      const conceptBlock = buildConceptInstruction(concept);
 
-You are the world's best creative strategist for Meta Ads cold traffic on the US market.
+      variableSuffix = `You are the world's best creative strategist for Meta Ads cold traffic on the US market.
 
-BRAND: ${project.name}
 PRODUCT: ${product}
 ${angleInstruction}
 ${additionalContext ? `ADDITIONAL CONTEXT: ${additionalContext}` : ''}
-
-GLOBAL KNOWLEDGE BASE:
-${knowledgeContext || '(none uploaded yet)'}
-
-BRAND DOCUMENTS:
-${brandContext || '(none uploaded yet)'}
-
-${NANOBANANA_FORMAT}
-${STATIC_PRODUCT_RULE}
-${diversityRule}
+${conceptBlock}
+${conceptBlock ? '' : diversityRule}
 
 ─────────────────────────────────────────────
 TASK
@@ -242,9 +222,21 @@ ${Array.from({ length: n }, (_, i) => `
 `).join('\n')}`;
     }
 
-    const messages: Anthropic.MessageParam[] = visionContent
-      ? [{ role: 'user', content: visionContent }]
-      : [{ role: 'user', content: promptText }];
+    const images = mode === 'clone'
+      ? competitorRefs.map((r) => ({
+          type: 'image' as const,
+          source: {
+            type: 'base64' as const,
+            media_type: r.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+            data: r.base64,
+          },
+        }))
+      : undefined;
+
+    const messages: Anthropic.MessageParam[] = [{
+      role: 'user',
+      content: buildCachedUserContent(stablePrefix, variableSuffix, images),
+    }];
 
     const maxTokens = mode === 'clone' ? 4000 + n * 500 : 2500 + n * 500;
     const anthropic = getAnthropic();
@@ -277,7 +269,7 @@ ${Array.from({ length: n }, (_, i) => `
             data: {
               projectId,
               module: 'static',
-              inputs: JSON.stringify({ product, count: n, mode, angle: angle || null, additionalContext }),
+              inputs: JSON.stringify({ product, count: n, mode, angle: angle || null, additionalContext, concept: concept || null }),
               output: fullText,
             },
           });
