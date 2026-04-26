@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL, GENERATION_RULES, STATIC_PRODUCT_RULE } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
+import { buildConceptInstruction, type SelectedConcept } from '@/lib/static-ad-concepts';
 
 export const maxDuration = 300;
 
@@ -36,6 +37,7 @@ export async function POST(req: Request) {
       imageBase64,
       imageMimeType,
       competitorImages,
+      concept,
     } = body as {
       projectId: string;
       product: string;
@@ -46,6 +48,7 @@ export async function POST(req: Request) {
       imageBase64?: string;
       imageMimeType?: string;
       competitorImages?: Array<{ base64: string; mimeType?: string }>;
+      concept?: SelectedConcept | null;
     };
 
     // Normalize competitor screenshots: new array shape + legacy single fields
@@ -173,12 +176,18 @@ ${Array.from({ length: n }, (_, i) => `
         ? `MARKETING ANGLE: "${angle}" — all ${n} prompts must be on this angle, each with a completely different visual format.`
         : `MARKETING ANGLE: Not specified — you choose the most powerful angle(s) based on the brand knowledge and product. If generating multiple prompts, you may vary angles to find the strongest.`;
 
+      // Concept selection (scratch mode only). When a family is locked,
+      // it becomes the spine of the batch — overrides the diversity rule
+      // because the concept itself dictates the format.
+      const conceptBlock = buildConceptInstruction(concept);
+
       variableSuffix = `You are the world's best creative strategist for Meta Ads cold traffic on the US market.
 
 PRODUCT: ${product}
 ${angleInstruction}
 ${additionalContext ? `ADDITIONAL CONTEXT: ${additionalContext}` : ''}
-${diversityRule}
+${conceptBlock}
+${conceptBlock ? '' : diversityRule}
 
 ─────────────────────────────────────────────
 TASK
@@ -260,7 +269,7 @@ ${Array.from({ length: n }, (_, i) => `
             data: {
               projectId,
               module: 'static',
-              inputs: JSON.stringify({ product, count: n, mode, angle: angle || null, additionalContext }),
+              inputs: JSON.stringify({ product, count: n, mode, angle: angle || null, additionalContext, concept: concept || null }),
               output: fullText,
             },
           });
