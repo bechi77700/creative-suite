@@ -1,22 +1,17 @@
 // Creative Suite logo — tech-premium mark (Linear / Vercel / Arc vibe).
 //
-// Layered geometry inside a rounded-square plate with a violet → fuchsia
-// diagonal gradient. The "C" is formed by two thick concentric arcs that
-// stop just short of meeting on the right (the signature notch). A
-// horizontal accent bar bisects the lower arc — the "tech" line that
-// reads as a chip / circuit cue. A small spark dot in the top-right
-// corner keeps the "creative" wink.
+// Layered geometry rendered as solid SVG shapes (no <mask> — masks fail
+// silently in some browsers and behind some CDN caches, leaving an empty
+// box). The plate is a violet → fuchsia gradient. The "C" is a white
+// stroked arc with a notch on the right, plus a small horizontal accent
+// bar (circuit-trace cue) and a spark dot (creative cue).
 //
-// All inline SVG, no raster. Inherits no theme color (the gradient is
-// the brand identity) — pass `noGlow` when you don't want the halo.
+// All inline SVG, no raster. Pass `noGlow` to disable the halo.
 //
 // Usage:
 //   <Logo />              // default 32px
 //   <Logo size={48} />    // hero placement
 //   <Logo size={20} />    // compact mobile bar
-//
-// The mark itself is the plate — label "Creative Suite" stays a sibling
-// <span>, handled by the caller. Keeps the SVG clean and language-free.
 
 interface LogoProps {
   size?: number;
@@ -27,8 +22,6 @@ interface LogoProps {
 }
 
 export default function Logo({ size = 32, className = '', noGlow = false }: LogoProps) {
-  // Stable id suffix per render — avoids cross-instance defs collisions
-  // when multiple <Logo /> render on the same page.
   return (
     <svg
       width={size}
@@ -40,45 +33,43 @@ export default function Logo({ size = 32, className = '', noGlow = false }: Logo
       className={`${noGlow ? '' : 'drop-shadow-[0_0_14px_rgba(168,85,247,0.55)]'} ${className}`}
     >
       <defs>
-        {/* Plate gradient — top-left violet, bottom-right fuchsia. */}
+        {/* Plate gradient — top-left violet → bottom-right fuchsia. */}
         <linearGradient id="cs-plate" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
           <stop offset="0%" stopColor="#A855F7" />
           <stop offset="55%" stopColor="#8B5CF6" />
           <stop offset="100%" stopColor="#D946EF" />
         </linearGradient>
 
-        {/* Subtle inner highlight on the top edge — adds depth. */}
+        {/* Top inner highlight overlay — adds depth. */}
         <linearGradient id="cs-shine" x1="0" y1="0" x2="0" y2="40" gradientUnits="userSpaceOnUse">
           <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.28" />
-          <stop offset="40%" stopColor="#FFFFFF" stopOpacity="0" />
+          <stop offset="50%" stopColor="#FFFFFF" stopOpacity="0" />
         </linearGradient>
-
-        {/* The C-mark mask — white = keep plate visible, black = cut through. */}
-        <mask id="cs-mark" maskUnits="userSpaceOnUse" x="0" y="0" width="40" height="40">
-          <rect x="0" y="0" width="40" height="40" rx="10" fill="white" />
-
-          {/* Outer C ring — thick stroke, opens to the right. */}
-          <circle cx="20" cy="20" r="9.2" fill="none" stroke="black" strokeWidth="3.6" />
-          {/* Right-side notch that opens the C and gives it the sharp tech edge. */}
-          <rect x="21.5" y="16.6" width="9" height="6.8" fill="black" />
-
-          {/* Tech accent — horizontal bar slicing through the right of the C,
-              reads as a circuit trace / chip pin. */}
-          <rect x="24.5" y="19.2" width="6" height="1.8" rx="0.9" fill="black" />
-
-          {/* Spark dot — top-right corner. */}
-          <circle cx="32.2" cy="8" r="2" fill="black" />
-        </mask>
       </defs>
 
-      {/* Base plate with the gradient, masked by the C-mark. */}
-      <rect x="0" y="0" width="40" height="40" rx="10" fill="url(#cs-plate)" mask="url(#cs-mark)" />
+      {/* Plate. */}
+      <rect x="0" y="0" width="40" height="40" rx="10" fill="url(#cs-plate)" />
 
-      {/* Top highlight overlay — applied after the mask so it only paints
-          the visible plate area. Same mask reused for clean clipping. */}
-      <rect x="0" y="0" width="40" height="40" rx="10" fill="url(#cs-shine)" mask="url(#cs-mark)" />
+      {/* Top shine overlay. */}
+      <rect x="0" y="0" width="40" height="40" rx="10" fill="url(#cs-shine)" />
 
-      {/* Hairline border — gives the mark a defined edge on dark backgrounds. */}
+      {/* The C — white stroked arc, opens to the right.
+          Built as a path for a clean half-open shape (no notch hack). */}
+      <path
+        d="M 27 13 A 9 9 0 1 0 27 27"
+        fill="none"
+        stroke="#FFFFFF"
+        strokeWidth="3.6"
+        strokeLinecap="round"
+      />
+
+      {/* Tech accent — small horizontal circuit-trace bar at the C's mouth. */}
+      <rect x="26" y="19.1" width="6" height="1.8" rx="0.9" fill="#FFFFFF" opacity="0.9" />
+
+      {/* Spark dot — top-right corner. */}
+      <circle cx="32.2" cy="8" r="2" fill="#FFFFFF" />
+
+      {/* Hairline border — defines the edge on dark backgrounds. */}
       <rect
         x="0.5"
         y="0.5"
@@ -86,7 +77,7 @@ export default function Logo({ size = 32, className = '', noGlow = false }: Logo
         height="39"
         rx="9.5"
         fill="none"
-        stroke="rgba(255,255,255,0.08)"
+        stroke="rgba(255,255,255,0.10)"
         strokeWidth="1"
       />
     </svg>
