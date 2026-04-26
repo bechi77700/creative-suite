@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL, GENERATION_RULES } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
+import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
 
 export async function POST(req: Request) {
   try {
@@ -18,8 +19,8 @@ export async function POST(req: Request) {
   }
 
   const globalKnowledge = await prisma.globalKnowledge.findMany();
-  const brandContext = project.documents.map((d) => `[${d.type.toUpperCase()} — ${d.name}]`).join('\n');
-  const knowledgeContext = globalKnowledge.map((k) => `[${k.category.toUpperCase()} — ${k.name}]`).join('\n');
+  const brandContext = buildBrandDocumentsBlock(project.documents);
+  const knowledgeContext = buildGlobalKnowledgeBlock(globalKnowledge, 'video');
 
   const wordCount = getApproxWordCount(length);
 
