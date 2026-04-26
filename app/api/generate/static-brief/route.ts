@@ -4,6 +4,7 @@ import { getAnthropic, MODEL, GENERATION_RULES, STATIC_PRODUCT_RULE, STATIC_VISU
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
 import { buildConceptInstruction, type SelectedConcept } from '@/lib/static-ad-concepts';
+import { buildFunnelStageInstruction, type FunnelStage } from '@/lib/funnel-stage';
 
 export const maxDuration = 300;
 
@@ -38,6 +39,7 @@ export async function POST(req: Request) {
       imageMimeType,
       competitorImages,
       concept,
+      funnelStage,
     } = body as {
       projectId: string;
       product: string;
@@ -49,7 +51,10 @@ export async function POST(req: Request) {
       imageMimeType?: string;
       competitorImages?: Array<{ base64: string; mimeType?: string }>;
       concept?: SelectedConcept | null;
+      funnelStage?: FunnelStage | null;
     };
+
+    const funnelBlock = buildFunnelStageInstruction(funnelStage);
 
     // Normalize competitor screenshots: new array shape + legacy single fields
     const competitorRefs: Array<{ base64: string; mimeType: string }> = [];
@@ -126,6 +131,7 @@ ${brandContext || '(none uploaded yet)'}`;
 
 PRODUCT: ${product}
 ${additionalContext ? `OPTIONAL INSTRUCTIONS FROM USER: ${additionalContext}` : ''}
+${funnelBlock}
 ${diversityRule}
 
 ─────────────────────────────────────────────
@@ -187,6 +193,7 @@ ${Array.from({ length: n }, (_, i) => `
 PRODUCT: ${product}
 ${angleInstruction}
 ${additionalContext ? `ADDITIONAL CONTEXT: ${additionalContext}` : ''}
+${funnelBlock}
 ${conceptBlock}
 ${conceptBlock ? '' : diversityRule}
 
@@ -270,7 +277,7 @@ ${Array.from({ length: n }, (_, i) => `
             data: {
               projectId,
               module: 'static',
-              inputs: JSON.stringify({ product, count: n, mode, angle: angle || null, additionalContext, concept: concept || null }),
+              inputs: JSON.stringify({ product, count: n, mode, angle: angle || null, additionalContext, concept: concept || null, funnelStage: funnelStage || null }),
               output: fullText,
             },
           });

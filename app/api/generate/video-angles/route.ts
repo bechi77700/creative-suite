@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL, GENERATION_RULES } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
+import { buildFunnelStageInstruction, type FunnelStage } from '@/lib/funnel-stage';
 
 export const maxDuration = 300;
 
@@ -11,7 +12,13 @@ function sse(event: string, data: unknown) {
 }
 
 export async function POST(req: Request) {
-  const { projectId, format, length } = await req.json();
+  const { projectId, format, length, funnelStage } = await req.json() as {
+    projectId: string;
+    format: string;
+    length: string;
+    funnelStage?: FunnelStage | null;
+  };
+  const funnelBlock = buildFunnelStageInstruction(funnelStage);
 
   const project = await prisma.brandProject.findUnique({
     where: { id: projectId },
@@ -43,6 +50,7 @@ ${saintGraalContent}`;
 
   const variableSuffix = `VIDEO FORMAT: ${format}
 TARGET LENGTH: ${length}
+${funnelBlock}
 
 ─────────────────────────────────────────────
 TASK

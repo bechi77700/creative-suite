@@ -4,6 +4,7 @@ import { getAnthropic, MODEL, GENERATION_RULES } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
 import type { VideoAnalysis } from '@/lib/gemini-video';
+import { buildFunnelStageInstruction, type FunnelStage } from '@/lib/funnel-stage';
 
 export const maxDuration = 300;
 
@@ -47,14 +48,16 @@ ${axesLines}`;
 
 export async function POST(req: Request) {
   const body = await req.json();
-  const { projectId, mode, script, instructions, videoAnalysis, videoSource } = body as {
+  const { projectId, mode, script, instructions, videoAnalysis, videoSource, funnelStage } = body as {
     projectId: string;
     mode: 'from_brand' | 'from_script' | 'from_video';
     script?: string;
     instructions?: string;
     videoAnalysis?: VideoAnalysis | null;
     videoSource?: 'own' | 'competitor' | null;
+    funnelStage?: FunnelStage | null;
   };
+  const funnelBlock = buildFunnelStageInstruction(funnelStage);
   // Clamp count to a sane range; default to 6 (matches new UI default).
   const requestedCount = Number(body.count);
   const count = Number.isFinite(requestedCount)
@@ -144,6 +147,7 @@ REFERENCE HOOK VIDEO
 ─────────────────────────────────────────────
 ${renderAnalysisForHook(videoAnalysis)}
 ${instructionsSection}
+${funnelBlock ? `\n─────────────────────────────────────────────\n${funnelBlock}\n─────────────────────────────────────────────\n` : ''}
 
 ─────────────────────────────────────────────
 MECHANISM — open vocabulary, internally consistent
@@ -254,7 +258,7 @@ GLOBAL KNOWLEDGE: ${knowledgeContext || '(none)'}
 BRAND DOCS: ${brandContext || '(none)'}`;
 
   const variableSuffix2 = `${modeSection}${instructionsSection}
-
+${funnelBlock ? `\n${funnelBlock}\n` : ''}
 Generate ${count} diverse hook ideas for Meta Ads cold traffic. Mix of:
 - Written hooks (on-screen text / spoken opening lines)
 - Visual hook ideas (what the camera shows in the first 2 seconds)
