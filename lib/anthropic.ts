@@ -23,6 +23,35 @@ GENERATION RULES — MANDATORY FOR ALL OUTPUTS:
 // produce (static-brief, iterate, variations). Image models redraw the
 // product when they read a description, which always degrades fidelity.
 // Force them to copy from the reference image instead.
+// Visual direction rule for static ads. The brand's art direction (colors,
+// fonts, mood from the brand documents / website) is the DEFAULT anchor,
+// not a prison. Direct response often wins with deliberately "off-brand"
+// stripped-down executions — pure white bg + red headline, plain notebook
+// scribble, raw screenshot, etc. The rule below tells Claude to mix.
+export const STATIC_VISUAL_DIRECTION_RULE = `
+STATIC AD — VISUAL DIRECTION RULE (MIX BRAND-FAITHFUL AND BRAND-BREAKING):
+- The brand's art direction (palette, fonts, photography style, mood — pulled
+  from BRAND DOCUMENTS) is the DEFAULT anchor for prompts, NOT a hard rule.
+- For batches of 2+ prompts, deliberately mix:
+  · Some prompts that respect the brand DA (premium feel, on-palette, on-tone)
+  · Some prompts that intentionally BREAK the DA for direct-response punch:
+    pure white background + bold red headline, plain notebook handwriting,
+    raw iPhone-style screenshot, ugly-on-purpose Comic Sans, post-it note,
+    plain black bg + neon text, bare statistic on solid color, etc.
+- Why mix: in cold traffic, "ugly" / "off-brand" / "stripped" ads often
+  outperform polished brand-faithful ads because they break the scroll
+  pattern and feel like organic content, not advertising.
+- Auto-fail: every prompt in a batch using the same brand-faithful aesthetic.
+  If 5 prompts all share the same color palette and polished mood, you've
+  failed the variety test — the batch reads like one campaign, not like
+  testing different hypotheses.
+- When a SELECTED CONCEPT family is locked (e.g. "Handwriting", "Textual"),
+  this rule still applies INSIDE the family — vary the brand-respect level
+  even within one concept.
+- For single-prompt requests (count = 1): pick whichever direction (faithful
+  or breaking) best serves the angle / concept / product for that ad.
+`;
+
 export const STATIC_PRODUCT_RULE = `
 STATIC-IMAGE PROMPT — PRODUCT REPRESENTATION RULE (NON-NEGOTIABLE):
 - NEVER describe the product itself in the prompt. No material, no color of

@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { prisma } from '@/lib/prisma';
-import { getAnthropic, MODEL, GENERATION_RULES, STATIC_PRODUCT_RULE } from '@/lib/anthropic';
+import { getAnthropic, MODEL, GENERATION_RULES, STATIC_PRODUCT_RULE, STATIC_VISUAL_DIRECTION_RULE } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
 import { buildConceptInstruction, type SelectedConcept } from '@/lib/static-ad-concepts';
@@ -98,6 +98,7 @@ MANDATORY DIVERSITY RULES — batch of ${n} prompts:
 
 ${NANOBANANA_FORMAT}
 ${STATIC_PRODUCT_RULE}
+${STATIC_VISUAL_DIRECTION_RULE}
 
 BRAND: ${project.name}
 
