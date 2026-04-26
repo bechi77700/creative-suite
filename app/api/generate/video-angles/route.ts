@@ -6,6 +6,10 @@ import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowl
 
 export const maxDuration = 300;
 
+function sse(event: string, data: unknown) {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
 export async function POST(req: Request) {
   const { projectId, format, length } = await req.json();
 
@@ -56,15 +60,47 @@ For each angle, output:
 
 Make them diverse: mix pain points, mechanism, results, social proof, story, comparison. Aggressive US direct response only.`;
 
-  const response = await getAnthropic().messages.create({
-    model: MODEL,
-    max_tokens: 4000,
-    messages: [{
-      role: 'user',
-      content: buildCachedUserContent(stablePrefix, variableSuffix),
-    }],
+  const anthropic = getAnthropic();
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        const messageStream = anthropic.messages.stream({
+          model: MODEL,
+          max_tokens: 4000,
+          messages: [{
+            role: 'user',
+            content: buildCachedUserContent(stablePrefix, variableSuffix),
+          }],
+        });
+
+        for await (const chunk of messageStream) {
+          if (
+            chunk.type === 'content_block_delta' &&
+            chunk.delta.type === 'text_delta'
+          ) {
+            controller.enqueue(encoder.encode(sse('text', { text: chunk.delta.text })));
+          }
+        }
+
+        controller.enqueue(encoder.encode(sse('done', {})));
+        controller.close();
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('[video-angles stream] ERROR:', message);
+        controller.enqueue(encoder.encode(sse('error', { error: message })));
+        controller.close();
+      }
+    },
   });
 
-  const angles = (response.content[0] as { type: string; text: string }).text;
-  return NextResponse.json({ angles });
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  });
 }

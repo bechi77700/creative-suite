@@ -211,15 +211,39 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
     setAngles('');
     setSelectedAngle('');
     setCheckedAngleIds(new Set());
-    const res = await fetch('/api/generate/video-angles', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId: id, format: selectedFormat, length: selectedLength }),
-    });
-    const data = await res.json();
-    setAngles(data.angles);
-    setAnglesLoading(false);
     setStep(3);
+
+    try {
+      const res = await fetch('/api/generate/video-angles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: id, format: selectedFormat, length: selectedLength }),
+      });
+
+      if (!res.ok || !res.body) {
+        const err = await res.json().catch(() => ({ error: `Server error ${res.status}` }));
+        console.error('[video-angles] error:', err.error);
+        setAnglesLoading(false);
+        return;
+      }
+
+      let accumulated = '';
+      for await (const evt of parseSSE(res.body)) {
+        if (evt.event === 'text' && evt.data && typeof evt.data === 'object' && 'text' in evt.data) {
+          accumulated += (evt.data as { text: string }).text;
+          setAngles(accumulated);
+        } else if (evt.event === 'done') {
+          break;
+        } else if (evt.event === 'error') {
+          console.error('[video-angles] stream error:', evt.data);
+          break;
+        }
+      }
+    } catch (e) {
+      console.error('[video-angles] fetch failed:', e);
+    } finally {
+      setAnglesLoading(false);
+    }
   };
 
   const generateScript = async () => {
