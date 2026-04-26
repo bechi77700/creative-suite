@@ -1,7 +1,5 @@
 import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL, GENERATION_RULES, STATIC_PRODUCT_RULE } from '@/lib/anthropic';
-import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
-import { buildCachedUserContent } from '@/lib/prompt-cache';
 
 export const maxDuration = 300;
 
@@ -30,6 +28,15 @@ const STRATEGY_INSTRUCTIONS: Record<string, string> = {
 
 function sse(event: string, data: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
+function buildKnowledgeContext(globalKnowledge: { category: string; name: string }[]) {
+  const staticAds = globalKnowledge.filter((k) => k.category === 'static_ads');
+  const rest = globalKnowledge.filter((k) => k.category !== 'static_ads');
+  return [
+    ...staticAds.map((k) => `[STATIC ADS REFERENCE — ${k.name}]`),
+    ...rest.map((k) => `[${k.category.toUpperCase()} — ${k.name}]`),
+  ].join('\n');
 }
 
 export async function POST(req: Request) {
@@ -92,8 +99,8 @@ export async function POST(req: Request) {
       });
     }
 
-    const brandContext = buildBrandDocumentsBlock(project.documents);
-    const knowledgeContext = buildGlobalKnowledgeBlock(globalKnowledge);
+    const brandContext = project.documents.map((d) => `[${d.type.toUpperCase()} — ${d.name}]`).join('\n');
+    const knowledgeContext = buildKnowledgeContext(globalKnowledge);
     const n = Math.max(1, Math.min(20, count || 3));
 
     const strategyBlock = strategies
@@ -128,7 +135,7 @@ ORIGINAL WINNING CREATIVE (${refImageDescriptor} attached above — analyze ${re
 ─────────────────────────────────────────────
 The user did NOT provide a written prompt. Look at the attached reference image${refs.length === 1 ? '' : 's'} and treat ${refs.length === 1 ? 'it' : 'them'} as the winning creative${refs.length === 1 ? '' : 's'}. Identify visual structure, headline, hook, layout, color treatment, and psychological angle. Each iteration must keep the winning DNA visible in ${refs.length === 1 ? 'this image' : 'these images'}.`;
 
-    const stablePrefix = `${GENERATION_RULES}
+    const promptText = `${GENERATION_RULES}
 
 You are iterating on a Meta Ads static creative that has ALREADY been validated as a winner.
 
@@ -141,9 +148,9 @@ BRAND DOCUMENTS:
 ${brandContext || '(none)'}
 
 ${NANOBANANA_FORMAT}
-${STATIC_PRODUCT_RULE}`;
+${STATIC_PRODUCT_RULE}
 
-    const variableSuffix = `${sourceBlock}
+${sourceBlock}
 
 ─────────────────────────────────────────────
 ITERATION STRATEGIES TO APPLY
@@ -191,22 +198,26 @@ ${Array.from({ length: n }, (_, i) => `
       async start(controller) {
         let fullText = '';
         try {
-          const images = refs.map((ref) => ({
-            type: 'image' as const,
-            source: {
-              type: 'base64' as const,
-              media_type: ref.mimeType as 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp',
-              data: ref.base64,
-            },
-          }));
+          const userContent: Array<
+            | { type: 'text'; text: string }
+            | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
+          > = [];
+          for (const ref of refs) {
+            userContent.push({
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: ref.mimeType,
+                data: ref.base64,
+              },
+            });
+          }
+          userContent.push({ type: 'text', text: promptText });
 
           const messageStream = anthropic.messages.stream({
             model: MODEL,
             max_tokens: 2500 + n * 500,
-            messages: [{
-              role: 'user',
-              content: buildCachedUserContent(stablePrefix, variableSuffix, images),
-            }],
+            messages: [{ role: 'user', content: userContent }],
           });
 
           for await (const chunk of messageStream) {

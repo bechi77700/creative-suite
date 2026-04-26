@@ -1,7 +1,5 @@
 import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL, GENERATION_RULES } from '@/lib/anthropic';
-import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
-import { buildCachedUserContent } from '@/lib/prompt-cache';
 import type { VideoAnalysis } from '@/lib/gemini-video';
 
 export const maxDuration = 300;
@@ -107,8 +105,8 @@ export async function POST(req: Request) {
       });
     }
 
-    const brandContext = buildBrandDocumentsBlock(project.documents);
-    const knowledgeContext = buildGlobalKnowledgeBlock(globalKnowledge);
+    const brandContext = project.documents.map((d) => `[${d.type.toUpperCase()} — ${d.name}]`).join('\n');
+    const knowledgeContext = globalKnowledge.map((k) => `[${k.category.toUpperCase()} — ${k.name}]`).join('\n');
     const n = Math.max(1, Math.min(20, count || 4));
 
     // Mode: Auto vs User-directed (per SOP)
@@ -127,7 +125,7 @@ ${originalScript.trim()}`;
       ? `\nADDITIONAL CUSTOM INSTRUCTIONS FROM USER (apply as a high-priority constraint — if the user opens the door to new claims, use the inline tag [NEW CLAIM] on each new factual claim you add):\n${otherInstructions.trim()}`
       : '';
 
-    const stablePrefix = `${GENERATION_RULES}
+    const promptText = `${GENERATION_RULES}
 
 You are running the **Iterate Video** SOP for a Meta Ads VIDEO SCRIPT that has ALREADY been validated as a winner. Follow the SOP that lives in the brand's Knowledge Base ("iterate-video-sop.md") — it defines the 10-axis closed catalog, Auto vs User-directed mode, the 1-2 axes-per-sibling rule, and the required output format.
 
@@ -137,9 +135,9 @@ GLOBAL KNOWLEDGE BASE:
 ${knowledgeContext || '(none)'}
 
 BRAND DOCUMENTS:
-${brandContext || '(none)'}`;
+${brandContext || '(none)'}
 
-    const variableSuffix = `─────────────────────────────────────────────
+─────────────────────────────────────────────
 REFERENCE
 ─────────────────────────────────────────────
 ${referenceBlock}
@@ -201,10 +199,7 @@ ${Array.from({ length: n }, (_, i) => `
           const messageStream = anthropic.messages.stream({
             model: MODEL,
             max_tokens: 3000 + n * 800,
-            messages: [{
-              role: 'user',
-              content: buildCachedUserContent(stablePrefix, variableSuffix),
-            }],
+            messages: [{ role: 'user', content: promptText }],
           });
 
           for await (const chunk of messageStream) {

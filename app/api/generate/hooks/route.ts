@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL, GENERATION_RULES } from '@/lib/anthropic';
-import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
-import { buildCachedUserContent } from '@/lib/prompt-cache';
 import type { VideoAnalysis } from '@/lib/gemini-video';
 
 export const maxDuration = 300;
@@ -78,8 +76,8 @@ export async function POST(req: Request) {
   }
 
   const globalKnowledge = await prisma.globalKnowledge.findMany();
-  const brandContext = buildBrandDocumentsBlock(project.documents);
-  const knowledgeContext = buildGlobalKnowledgeBlock(globalKnowledge);
+  const brandContext = project.documents.map((d) => `[${d.type.toUpperCase()} — ${d.name}]`).join('\n');
+  const knowledgeContext = globalKnowledge.map((k) => `[${k.category.toUpperCase()} — ${k.name}]`).join('\n');
 
   const instructionsSection = instructions?.trim()
     ? `\nUSER INSTRUCTIONS (mandatory — apply these to the generation):\n${instructions}`
@@ -121,9 +119,9 @@ What you DO clone:
 - The on-screen text behavior
 - The tone (intimate / authoritative / peer / urgent)`;
 
-    const stablePrefix = `${GENERATION_RULES}
+    const promptText = `${GENERATION_RULES}
 
-You are running the **Clone Hook from Video** SOP for Meta Ads (lives in the brand's Knowledge Base as "clone-hook-from-video-sop.md"). The user uploaded a reference hook video and wants hooks based on it.
+You are running the **Clone Hook from Video** SOP for Meta Ads (lives in the brand's Knowledge Base as "clone-hook-from-video-sop.md"). The user uploaded a reference hook video and wants ${count} hook${count !== 1 ? 's' : ''} based on it.
 
 BRAND: ${project.name}
 
@@ -131,9 +129,7 @@ GLOBAL KNOWLEDGE BASE:
 ${knowledgeContext || '(none)'}
 
 BRAND DOCUMENTS:
-${brandContext || '(none)'}`;
-
-    const variableSuffix = `Number of hooks requested: ${count}
+${brandContext || '(none)'}
 
 ─────────────────────────────────────────────
 ${sourceBlock}
@@ -214,10 +210,7 @@ PROHIBITIONS (auto-fail):
     const response = await getAnthropic().messages.create({
       model: MODEL,
       max_tokens: maxTokens,
-      messages: [{
-        role: 'user',
-        content: buildCachedUserContent(stablePrefix, variableSuffix),
-      }],
+      messages: [{ role: 'user', content: promptText }],
     });
 
     const output = (response.content[0] as { type: string; text: string }).text;
@@ -247,13 +240,13 @@ PROHIBITIONS (auto-fail):
       ? `MODE: From existing script\n\nSCRIPT:\n${script}`
       : `MODE: From brand knowledge only (no script provided)`;
 
-  const stablePrefix2 = `${GENERATION_RULES}
+  const prompt = `${GENERATION_RULES}
 
 BRAND: ${project.name}
 GLOBAL KNOWLEDGE: ${knowledgeContext || '(none)'}
-BRAND DOCS: ${brandContext || '(none)'}`;
+BRAND DOCS: ${brandContext || '(none)'}
 
-  const variableSuffix2 = `${modeSection}${instructionsSection}
+${modeSection}${instructionsSection}
 
 Generate ${count} diverse hook ideas for Meta Ads cold traffic. Mix of:
 - Written hooks (on-screen text / spoken opening lines)
@@ -283,10 +276,7 @@ No preamble. Start directly with Hook #1.`;
   const response = await getAnthropic().messages.create({
     model: MODEL,
     max_tokens: maxTokens,
-    messages: [{
-      role: 'user',
-      content: buildCachedUserContent(stablePrefix2, variableSuffix2),
-    }],
+    messages: [{ role: 'user', content: prompt }],
   });
 
   const output = (response.content[0] as { type: string; text: string }).text;

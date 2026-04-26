@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL, GENERATION_RULES, STATIC_PRODUCT_RULE } from '@/lib/anthropic';
-import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
-import { buildCachedUserContent } from '@/lib/prompt-cache';
 
 interface BatchRow {
   angle: string;
@@ -28,23 +26,23 @@ export async function POST(req: Request) {
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
 
   const globalKnowledge = await prisma.globalKnowledge.findMany();
-  const brandContext = buildBrandDocumentsBlock(project.documents);
-  const knowledgeContext = buildGlobalKnowledgeBlock(globalKnowledge);
+  const brandContext = project.documents
+    .map((d) => `[${d.type.toUpperCase()} — ${d.name}]`)
+    .join('\n');
+  const knowledgeContext = globalKnowledge.map((k) => `[${k.category.toUpperCase()} — ${k.name}]`).join('\n');
 
   const results: { version: string; output: string; generationId: string }[] = [];
 
-  // Stable prefix is built once outside the loop and reused for every row —
-  // every row hits the same cache entry, paying ~10% on the prefix from row 2+.
-  const stablePrefix = `${GENERATION_RULES}
+  for (const row of rows) {
+    const prompt = `${GENERATION_RULES}
 ${STATIC_PRODUCT_RULE}
 
 BRAND: ${project.name}
 PRODUCT: ${product}
 GLOBAL KNOWLEDGE: ${knowledgeContext || '(none)'}
-BRAND DOCS: ${brandContext || '(none)'}`;
+BRAND DOCS: ${brandContext || '(none)'}
 
-  for (const row of rows) {
-    const variableSuffix = `Generate a complete STATIC AD BRIEF:
+Generate a complete STATIC AD BRIEF:
 - Format: ${format}
 - Angle: ${row.angle}
 - Design Family: ${row.design_family}
@@ -71,10 +69,7 @@ Use the exact output structure:
     const response = await getAnthropic().messages.create({
       model: MODEL,
       max_tokens: 1500,
-      messages: [{
-        role: 'user',
-        content: buildCachedUserContent(stablePrefix, variableSuffix),
-      }],
+      messages: [{ role: 'user', content: prompt }],
     });
 
     const output = (response.content[0] as { type: string; text: string }).text;

@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL, GENERATION_RULES } from '@/lib/anthropic';
-import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
-import { buildCachedUserContent } from '@/lib/prompt-cache';
 
 export async function POST(req: Request) {
   try {
@@ -19,8 +17,8 @@ export async function POST(req: Request) {
   }
 
   const globalKnowledge = await prisma.globalKnowledge.findMany();
-  const brandContext = buildBrandDocumentsBlock(project.documents);
-  const knowledgeContext = buildGlobalKnowledgeBlock(globalKnowledge);
+  const brandContext = project.documents.map((d) => `[${d.type.toUpperCase()} — ${d.name}]`).join('\n');
+  const knowledgeContext = globalKnowledge.map((k) => `[${k.category.toUpperCase()} — ${k.name}]`).join('\n');
 
   const wordCount = getApproxWordCount(length);
 
@@ -44,13 +42,13 @@ Output the FULL rewritten script in the same OUTPUT FORMAT below. Do not
 prepend any commentary about what changed.`
     : '';
 
-  const stablePrefix = `${GENERATION_RULES}
+  const prompt = `${GENERATION_RULES}
 
 BRAND: ${project.name}
 GLOBAL KNOWLEDGE: ${knowledgeContext || '(none)'}
-BRAND DOCS: ${brandContext || '(none)'}`;
+BRAND DOCS: ${brandContext || '(none)'}
 
-  const variableSuffix = `VIDEO FORMAT: ${format}
+VIDEO FORMAT: ${format}
 TARGET LENGTH: ${length} (~${wordCount} words of spoken script)
 ANGLE: ${angle}
 ${additionalContext ? `ADDITIONAL CONTEXT: ${additionalContext}` : ''}
@@ -82,10 +80,7 @@ OUTPUT FORMAT:
   const response = await getAnthropic().messages.create({
     model: MODEL,
     max_tokens: 3000,
-    messages: [{
-      role: 'user',
-      content: buildCachedUserContent(stablePrefix, variableSuffix),
-    }],
+    messages: [{ role: 'user', content: prompt }],
   });
 
   const output = (response.content[0] as { type: string; text: string }).text;

@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL, GENERATION_RULES, STATIC_PRODUCT_RULE } from '@/lib/anthropic';
-import { buildGlobalKnowledgeBlock } from '@/lib/knowledge';
-import { buildCachedUserContent } from '@/lib/prompt-cache';
 
 export async function POST(req: Request) {
   const body = await req.json();
@@ -15,20 +13,20 @@ export async function POST(req: Request) {
   if (!original) return NextResponse.json({ error: 'Generation not found' }, { status: 404 });
 
   const globalKnowledge = await prisma.globalKnowledge.findMany();
-  const knowledgeContext = buildGlobalKnowledgeBlock(globalKnowledge);
+  const knowledgeContext = globalKnowledge.map((k) => `[${k.category.toUpperCase()} — ${k.name}]`).join('\n');
 
   const moduleLabel =
     original.module === 'static' ? 'STATIC AD BRIEF' :
     original.module === 'video' ? 'VIDEO SCRIPT' : 'HOOK SET';
 
   const isStatic = original.module === 'static' || original.module === 'iterate';
-  const stablePrefix = `${GENERATION_RULES}
+  const prompt = `${GENERATION_RULES}
 ${isStatic ? STATIC_PRODUCT_RULE : ''}
 
 BRAND: ${original.project.name}
-GLOBAL KNOWLEDGE: ${knowledgeContext || '(none)'}`;
+GLOBAL KNOWLEDGE: ${knowledgeContext || '(none)'}
 
-  const variableSuffix = `ORIGINAL ${moduleLabel}:
+ORIGINAL ${moduleLabel}:
 ${original.output}
 
 ORIGINAL INPUTS: ${original.inputs}
@@ -52,10 +50,7 @@ Label each variation clearly:
   const response = await getAnthropic().messages.create({
     model: MODEL,
     max_tokens: 4000,
-    messages: [{
-      role: 'user',
-      content: buildCachedUserContent(stablePrefix, variableSuffix),
-    }],
+    messages: [{ role: 'user', content: prompt }],
   });
 
   const output = (response.content[0] as { type: string; text: string }).text;

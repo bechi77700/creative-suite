@@ -1,7 +1,5 @@
 import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL, GENERATION_RULES } from '@/lib/anthropic';
-import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
-import { buildCachedUserContent } from '@/lib/prompt-cache';
 import type { VideoAnalysis } from '@/lib/gemini-video';
 
 export const maxDuration = 300;
@@ -83,15 +81,15 @@ export async function POST(req: Request) {
       });
     }
 
-    const brandContext = buildBrandDocumentsBlock(project.documents);
-    const knowledgeContext = buildGlobalKnowledgeBlock(globalKnowledge);
+    const brandContext = project.documents.map((d) => `[${d.type.toUpperCase()} — ${d.name}]`).join('\n');
+    const knowledgeContext = globalKnowledge.map((k) => `[${k.category.toUpperCase()} — ${k.name}]`).join('\n');
     const n = Math.max(1, Math.min(10, count || 3));
 
     const additionalBlock = additionalContext.trim()
       ? `\nADDITIONAL CONTEXT FROM USER (apply as a high-priority constraint):\n${additionalContext.trim()}`
       : '';
 
-    const stablePrefix = `${GENERATION_RULES}
+    const promptText = `${GENERATION_RULES}
 
 You are running the **Clone & Adapt** SOP for a Meta Ads VIDEO SCRIPT. Follow the SOP that lives in the brand's Knowledge Base ("clone-and-adapt-video-sop.md") — it defines the mandatory two-phase output (Structural Autopsy + Adapted Scripts), the ±10% word-count rule, the same-blocks-same-order rule, the Copy DNA preservation, and the no-fabrication-of-brand-facts rule.
 
@@ -103,9 +101,9 @@ GLOBAL KNOWLEDGE BASE:
 ${knowledgeContext || '(none)'}
 
 BRAND DOCUMENTS:
-${brandContext || '(none)'}`;
+${brandContext || '(none)'}
 
-    const variableSuffix = `─────────────────────────────────────────────
+─────────────────────────────────────────────
 REFERENCE VIDEO
 ─────────────────────────────────────────────
 ${renderAnalysis(videoAnalysis)}
@@ -187,10 +185,7 @@ Repeat for every script ${n > 1 ? `(Script 1 through Script ${n})` : ''}, keepin
           const messageStream = anthropic.messages.stream({
             model: MODEL,
             max_tokens: 4000 + n * 1000,
-            messages: [{
-              role: 'user',
-              content: buildCachedUserContent(stablePrefix, variableSuffix),
-            }],
+            messages: [{ role: 'user', content: promptText }],
           });
 
           for await (const chunk of messageStream) {
