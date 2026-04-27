@@ -159,9 +159,9 @@ If you produce dense paragraphs, the ad fails — even if the content is great.
 - If none of the 4 reflexes fire → the image fails.
 - Photo must respect the 5 systemic principles from SOP §6: visual friction,
   radical authenticity, intimate intrusion, visceral proof, focus displacement.
-- Format: 1:1 square OR 4:5 vertical. NEVER 16:9. iPhone-authentic look —
-  grain OK, imperfect framing OK, natural light, no studio, no filter, no
-  text on image, no logo, no pro model.
+- Format: ALWAYS 1:1 square. Never 4:5, never 16:9, never anything else.
+  iPhone-authentic look — grain OK, imperfect framing OK, natural light,
+  no studio, no filter, no text on image, no logo, no pro model.
 
 ─────────────────────────────────────────────
 OUTPUT FORMAT
@@ -206,12 +206,12 @@ OUTPUT FORMAT
 
 **Prompt Nanobanana** :
 \`\`\`
-[Prompt complet en anglais, prêt à coller dans Nano-Banana 2. Détails de
-cadrage (square 1:1 OR 4:5 vertical), lumière naturelle, éléments de scène,
-expression du personnage, look photo amateur / iPhone authentique. Inclure
-explicitement: no text on image, no logo, no studio lighting, no pro model,
-no product packshot. Le prompt doit être généré dynamiquement à partir du
-moment du récit choisi — pas un template.]
+[Prompt complet en anglais, prêt à coller dans Nano-Banana 2. Doit
+commencer par "1:1 square format,". Détails de cadrage, lumière naturelle,
+éléments de scène, expression du personnage, look photo amateur / iPhone
+authentique. Inclure explicitement: no text on image, no logo, no studio
+lighting, no pro model, no product packshot. Le prompt doit être généré
+dynamiquement à partir du moment du récit choisi — pas un template.]
 \`\`\`
 
 **Pourquoi cette image fonctionne** :
