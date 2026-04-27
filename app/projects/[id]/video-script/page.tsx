@@ -386,6 +386,35 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
 
   const copyText = (text: string) => navigator.clipboard.writeText(text);
 
+  // ── Copy helpers — strip markdown scaffolding so Google Docs paste stays clean
+  // Removes `## HOOK / ## BODY / ## CTA`, `[HOOK · 0:00 · 12 words]` block
+  // markers, `**Total:** ...` headers, `### Script N — ...` titles, `---`
+  // separators, and `*Approximate word count: ...*` footers.
+  const stripScriptScaffolding = (md: string): string =>
+    md
+      // Block markers like "[HOOK · 0:02 · 12 words]"
+      .replace(/^\[[A-Z][A-Z0-9 _/-]*·[^\]]*\]\s*$/gm, '')
+      // ## HOOK / ## BODY / ## CTA / ## Phase X — Y
+      .replace(/^#{2,3}\s+(?:HOOK|BODY|CTA)\s*$/gim, '')
+      // ### Script N — ... titles
+      .replace(/^#{2,3}\s+Script\s+\d+[^\n]*$/gim, '')
+      // **Total:** ... lines
+      .replace(/^\*\*Total:\*\*[^\n]*$/gim, '')
+      // *Approximate word count: ...*
+      .replace(/^\*Approximate word count:[^\n]*\*\s*$/gim, '')
+      // Bare --- separators
+      .replace(/^---+\s*$/gm, '')
+      // Collapse 3+ blank lines into 2
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+  // For Clone & Adapt output: keep only "## Phase 2 — Adapted Scripts" onward.
+  const stripAutopsy = (md: string): string => {
+    const m = md.match(/##\s*Phase\s*2[^\n]*\n/i);
+    if (!m || m.index === undefined) return md;
+    return md.slice(m.index + m[0].length).trim();
+  };
+
   const anyLoading = runs.some((r) => r.loading);
 
   const StepBadge = ({ n, label }: { n: number; label: string }) => (
@@ -643,7 +672,29 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
                     </div>
                     <div className="flex gap-2 items-center">
                       {run.output && (
-                        <button onClick={() => copyText(run.output)} className="btn-secondary text-xs px-3 py-1">Copy</button>
+                        <>
+                          <button
+                            onClick={() => copyText(stripScriptScaffolding(stripAutopsy(run.output)))}
+                            className="btn-primary text-xs px-3 py-1"
+                            title="Copie uniquement les scripts adaptés (sans Autopsy), texte propre — prêt pour Google Docs"
+                          >
+                            ✨ Copy scripts only
+                          </button>
+                          <button
+                            onClick={() => copyText(stripAutopsy(run.output))}
+                            className="btn-secondary text-xs px-3 py-1"
+                            title="Copie les scripts (sans Autopsy) en gardant les marqueurs de blocs"
+                          >
+                            Scripts + blocks
+                          </button>
+                          <button
+                            onClick={() => copyText(run.output)}
+                            className="btn-secondary text-xs px-3 py-1"
+                            title="Copie tout, y compris l'Autopsy"
+                          >
+                            Copy raw
+                          </button>
+                        </>
                       )}
                       <button
                         onClick={() => deleteCloneRun(run.id)}
@@ -822,7 +873,20 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
                             </button>
                           </>
                         )}
-                        <button onClick={() => copyText(run.output)} className="btn-secondary text-xs px-3 py-1">Copy</button>
+                        <button
+                          onClick={() => copyText(stripScriptScaffolding(run.output))}
+                          className="btn-primary text-xs px-3 py-1"
+                          title="Copie le texte du script seul, sans HOOK/BODY/CTA ni word count — prêt pour Google Docs"
+                        >
+                          ✨ Copy clean
+                        </button>
+                        <button
+                          onClick={() => copyText(run.output)}
+                          className="btn-secondary text-xs px-3 py-1"
+                          title="Copie tout le markdown brut"
+                        >
+                          Copy raw
+                        </button>
                         <button
                           onClick={() => deleteRun(run.id)}
                           title="Delete this script"

@@ -462,36 +462,75 @@ function HookList({
         const assetKey = `${bucket}-hook-${b.index}`;
         const starred = winnerKeys.has(assetKey);
         return (
-          <div
+          <HookCard
             key={b.id}
-            className={`rounded-lg border px-4 py-3 transition-colors ${
-              starred ? 'bg-accent-violet/5 border-accent-violet/40' : 'bg-bg-base/40 border-bg-border'
-            }`}
-          >
-            <div className="flex items-start gap-3">
-              <button
-                onClick={() => onToggle({ index: b.index, full: b.full, title: b.title })}
-                title={starred ? 'Remove from Winners' : 'Mark as Winner'}
-                className={`flex-shrink-0 w-7 h-7 rounded-full border flex items-center justify-center text-sm transition-colors ${
-                  starred
-                    ? 'bg-accent-violet/20 border-accent-violet text-accent-violet'
-                    : 'border-bg-border text-text-muted hover:border-accent-violet/50 hover:text-accent-violet'
-                }`}
-              >
-                {starred ? '★' : '☆'}
-              </button>
-              <div className="flex-1 min-w-0">
-                <p className="text-text-primary text-sm font-semibold">
-                  {b.index + 1}. {b.title}
-                </p>
-                <div className="result-content mt-1.5 [&_p]:mb-0.5">
-                  <ReactMarkdown>{b.body}</ReactMarkdown>
-                </div>
-              </div>
-            </div>
-          </div>
+            block={b}
+            starred={starred}
+            onToggle={() => onToggle({ index: b.index, full: b.full, title: b.title })}
+          />
         );
       })}
+    </div>
+  );
+}
+
+function HookCard({
+  block,
+  starred,
+  onToggle,
+}: {
+  block: { id: string; index: number; title: string; body: string; full: string };
+  starred: boolean;
+  onToggle: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      // Copy the full hook block (title + body) so the user gets everything
+      // they see on screen — but as plain text (no CSS bg leaks into Docs).
+      await navigator.clipboard.writeText(block.full);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch {
+      /* ignore */
+    }
+  };
+  return (
+    <div
+      className={`rounded-lg border px-4 py-3 transition-colors ${
+        starred ? 'bg-accent-violet/5 border-accent-violet/40' : 'bg-bg-base/40 border-bg-border'
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        <button
+          onClick={onToggle}
+          title={starred ? 'Remove from Winners' : 'Mark as Winner'}
+          className={`flex-shrink-0 w-7 h-7 rounded-full border flex items-center justify-center text-sm transition-colors ${
+            starred
+              ? 'bg-accent-violet/20 border-accent-violet text-accent-violet'
+              : 'border-bg-border text-text-muted hover:border-accent-violet/50 hover:text-accent-violet'
+          }`}
+        >
+          {starred ? '★' : '☆'}
+        </button>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-text-primary text-sm font-semibold">
+              {block.index + 1}. {block.title}
+            </p>
+            <button
+              onClick={copy}
+              className="btn-secondary text-[11px] px-2 py-0.5 flex-shrink-0"
+              title="Copy this hook"
+            >
+              {copied ? '✓ Copied' : 'Copy'}
+            </button>
+          </div>
+          <div className="result-content mt-1.5 [&_p]:mb-0.5">
+            <ReactMarkdown>{block.body}</ReactMarkdown>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
