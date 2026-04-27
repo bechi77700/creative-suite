@@ -16,7 +16,7 @@ import { useEffect, useState } from 'react';
 import Sidebar from '@/components/Sidebar';
 import SaintGraalGate from '@/components/SaintGraalGate';
 import ReactMarkdown from 'react-markdown';
-import { parseSSE } from '@/lib/streaming';
+import { parseSSE, extractClosedCodeBlocks } from '@/lib/streaming';
 
 interface PageProps {
   params: { id: string };
@@ -36,6 +36,12 @@ export default function NativeAdsPage({ params }: PageProps) {
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
 
+  // Image generation (fal.ai, fired automatically once the text stream ends).
+  const [imageUrl, setImageUrl] = useState('');
+  const [imageLoading, setImageLoading] = useState(false);
+  const [imageError, setImageError] = useState('');
+  const [imagePromptUsed, setImagePromptUsed] = useState('');
+
   useEffect(() => {
     fetch(`/api/projects/${id}`)
       .then((r) => r.json())
@@ -47,11 +53,51 @@ export default function NativeAdsPage({ params }: PageProps) {
       });
   }, [id]);
 
+  // Pull the Nanobanana prompt out of the streamed markdown. The model is
+  // instructed to wrap it in a single fenced code block under "Prompt
+  // Nanobanana". We just take the first closed code block.
+  const extractNanoPrompt = (md: string): string => {
+    const blocks = extractClosedCodeBlocks(md);
+    return blocks[0]?.trim() ?? '';
+  };
+
+  const generateImage = async (nanoPrompt: string) => {
+    if (!nanoPrompt) return;
+    setImageLoading(true);
+    setImageError('');
+    setImageUrl('');
+    setImagePromptUsed(nanoPrompt);
+
+    try {
+      const res = await fetch('/api/generate/image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: nanoPrompt,
+          model: 'nano-banana-pro',
+          projectId: id,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setImageUrl(data.imageUrl);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setImageError(message);
+    } finally {
+      setImageLoading(false);
+    }
+  };
+
   const generate = async () => {
     if (!product.trim() || loading) return;
     setLoading(true);
     setError('');
     setOutput('');
+    // Reset previous image too — new ad → new image.
+    setImageUrl('');
+    setImageError('');
+    setImagePromptUsed('');
 
     try {
       const res = await fetch('/api/generate/native-ad', {
@@ -80,12 +126,24 @@ export default function NativeAdsPage({ params }: PageProps) {
           throw new Error(message);
         }
       }
+
+      // Stream done — auto-fire image generation if a Nanobanana prompt
+      // was emitted. Don't await: image takes 30-60s, no need to block UI.
+      const nanoPrompt = extractNanoPrompt(acc);
+      if (nanoPrompt) {
+        void generateImage(nanoPrompt);
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const regenerateImage = () => {
+    const nanoPrompt = extractNanoPrompt(output);
+    if (nanoPrompt) void generateImage(nanoPrompt);
   };
 
   const copy = async () => {
@@ -217,6 +275,86 @@ export default function NativeAdsPage({ params }: PageProps) {
                       <div className="h-4 bg-bg-hover rounded shimmer w-full" />
                       <div className="h-4 bg-bg-hover rounded shimmer w-5/6" />
                       <div className="h-4 bg-bg-hover rounded shimmer w-2/3" />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Image (auto-generated from the IMAGE BRIEF block) */}
+            {(imageLoading || imageUrl || imageError) && (
+              <div className="mt-6">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-text-primary text-lg font-semibold">Image</h2>
+                    <span className="text-text-muted text-xs">Nano-Banana Pro</span>
+                    {imageLoading && (
+                      <span className="text-accent-violet text-xs flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-accent-violet animate-pulse" />
+                        génération…
+                      </span>
+                    )}
+                  </div>
+                  {imageUrl && !imageLoading && (
+                    <button onClick={regenerateImage} className="btn-secondary text-xs">
+                      ↻ Régénérer
+                    </button>
+                  )}
+                </div>
+
+                <div className="card p-4 md:p-6">
+                  {imageError ? (
+                    <div className="space-y-3">
+                      <p className="text-accent-red text-sm font-medium">Image non générée</p>
+                      <p className="text-text-secondary text-sm">{imageError}</p>
+                      <button onClick={regenerateImage} className="btn-secondary text-xs">
+                        Réessayer
+                      </button>
+                    </div>
+                  ) : imageUrl ? (
+                    <div className="space-y-4">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={imageUrl}
+                        alt="Native ad visual"
+                        className="w-full max-w-2xl mx-auto rounded-lg border border-bg-border"
+                      />
+                      <div className="flex flex-wrap gap-2">
+                        <a
+                          href={imageUrl}
+                          download
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn-secondary text-xs"
+                        >
+                          ⬇ Télécharger
+                        </a>
+                        <a
+                          href={imageUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn-secondary text-xs"
+                        >
+                          ↗ Ouvrir
+                        </a>
+                      </div>
+                      {imagePromptUsed && (
+                        <details className="text-xs">
+                          <summary className="text-text-muted cursor-pointer hover:text-text-secondary">
+                            Voir le prompt utilisé
+                          </summary>
+                          <pre className="mt-2 p-3 bg-bg-base border border-bg-border rounded text-text-secondary whitespace-pre-wrap break-words">
+                            {imagePromptUsed}
+                          </pre>
+                        </details>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="aspect-[3/4] max-w-md mx-auto bg-bg-hover rounded shimmer" />
+                      <p className="text-center text-text-muted text-xs">
+                        L'image se génère automatiquement à partir du IMAGE BRIEF (30-60s)…
+                      </p>
                     </div>
                   )}
                 </div>

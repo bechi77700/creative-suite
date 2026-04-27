@@ -11,14 +11,16 @@
 //   → On done, persists a Generation row (module: 'native', type: 'native_ad').
 //
 // Notes:
-// - MODEL_SMART (Opus) — long-form strategy + narrative. No funnel / language
-//   selector: brand+market come from Saint Graal; native ads default to TOFU.
+// - MODEL_FAST (Sonnet) — long-form is expensive on Opus. Sonnet handles the
+//   9-block narrative well given the SOP+references in the cached prefix.
+//   No funnel / language selector: brand+market come from Saint Graal;
+//   native ads default to TOFU.
 // - Saint Graal is required, same gate as video/static.
 // - Prompt cache on KB+SOP+brand docs (the heavy stable prefix).
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getAnthropic, MODEL_SMART, GENERATION_RULES } from '@/lib/anthropic';
+import { getAnthropic, MODEL_FAST, GENERATION_RULES } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
 
@@ -175,7 +177,7 @@ amateur / journalistique. Pas de texte sur l'image. Pas de logo.]
     async start(controller) {
       try {
         const messageStream = anthropic.messages.stream({
-          model: MODEL_SMART,
+          model: MODEL_FAST,
           max_tokens: 8000,
           messages: [
             {
