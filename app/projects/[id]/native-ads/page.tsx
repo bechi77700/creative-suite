@@ -117,6 +117,19 @@ export default function NativeAdsPage({ params }: PageProps) {
   const [imagePromptUsed, setImagePromptUsed] = useState('');
   const [imageFeedback, setImageFeedback] = useState('');
 
+  // Alternative image briefs — when the user wants a DIFFERENT type of image
+  // for the same ad copy (different moment / different SOP §6 réflexe).
+  // `briefHistory` is the running log of all briefs we've shown for this ad
+  // copy (including the original). It's sent back to the alt-image route so
+  // Claude can pick a DIFFERENT moment each time.
+  // `activeBrief` overrides the parsed brief in the UI — when null we fall
+  // back to whatever was parsed from the stream.
+  type ImgBrief = { concept: string; prompt: string; why: string };
+  const [activeBrief, setActiveBrief] = useState<ImgBrief | null>(null);
+  const [briefHistory, setBriefHistory] = useState<ImgBrief[]>([]);
+  const [altLoading, setAltLoading] = useState(false);
+  const [altError, setAltError] = useState('');
+
   // ── Headlines (SOP §7) ───────────────────────────────────────────────────
   const [headlines, setHeadlines] = useState<Headline[]>([]);
   const [headlinesLoading, setHeadlinesLoading] = useState(false);
@@ -156,6 +169,14 @@ export default function NativeAdsPage({ params }: PageProps) {
   // re-parse the full markdown on every keystroke of feedback input.
   const parsed = useMemo(() => parseOutput(output), [output]);
 
+  // The brief currently shown / used for image generation. When the user
+  // asks for "another type of image", we set activeBrief and the UI swaps.
+  const displayBrief: ImgBrief | null =
+    activeBrief ??
+    (parsed.brief
+      ? { concept: parsed.brief.concept, prompt: parsed.brief.prompt, why: parsed.brief.why }
+      : null);
+
   const generateImage = async (nanoPrompt: string, feedback?: string) => {
     if (!nanoPrompt) return;
     setImageLoading(true);
@@ -194,6 +215,9 @@ export default function NativeAdsPage({ params }: PageProps) {
     setImageError('');
     setImagePromptUsed('');
     setImageFeedback('');
+    setActiveBrief(null);
+    setBriefHistory([]);
+    setAltError('');
 
     try {
       const res = await fetch('/api/generate/native-ad', {
@@ -226,7 +250,16 @@ export default function NativeAdsPage({ params }: PageProps) {
       // Stream done — fire image generation if we got a parseable prompt.
       const finalParsed = parseOutput(acc);
       const nanoPrompt = finalParsed.brief?.prompt ?? '';
-      if (nanoPrompt) {
+      if (finalParsed.brief && nanoPrompt) {
+        // Seed brief history with the original brief so the alt-image route
+        // knows what's been tried already.
+        setBriefHistory([
+          {
+            concept: finalParsed.brief.concept,
+            prompt: finalParsed.brief.prompt,
+            why: finalParsed.brief.why,
+          },
+        ]);
         void generateImage(nanoPrompt);
       }
     } catch (err: unknown) {
@@ -238,12 +271,49 @@ export default function NativeAdsPage({ params }: PageProps) {
   };
 
   const regenerateImage = () => {
-    if (parsed.brief?.prompt) void generateImage(parsed.brief.prompt);
+    if (displayBrief?.prompt) void generateImage(displayBrief.prompt);
   };
 
   const iterateImage = () => {
-    if (parsed.brief?.prompt && imageFeedback.trim()) {
-      void generateImage(parsed.brief.prompt, imageFeedback.trim());
+    if (displayBrief?.prompt && imageFeedback.trim()) {
+      void generateImage(displayBrief.prompt, imageFeedback.trim());
+    }
+  };
+
+  // Ask Claude for a NEW image brief — same ad copy, different moment /
+  // different SOP §6 réflexe. Sends the full brief history so the model
+  // doesn't repeat itself.
+  const generateAltImage = async () => {
+    if (!parsed.adCopy.trim() || altLoading) return;
+    setAltLoading(true);
+    setAltError('');
+    try {
+      const res = await fetch('/api/generate/native-ad/alt-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: id,
+          adCopy: parsed.adCopy,
+          previousBriefs: briefHistory,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      const newBrief: ImgBrief = {
+        concept: data.concept ?? '',
+        prompt: data.prompt ?? '',
+        why: data.why ?? '',
+      };
+      if (!newBrief.prompt) throw new Error('No prompt returned.');
+      setActiveBrief(newBrief);
+      setBriefHistory((prev) => [...prev, newBrief]);
+      // Fire the image with the new prompt.
+      void generateImage(newBrief.prompt);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setAltError(message);
+    } finally {
+      setAltLoading(false);
     }
   };
 
@@ -273,9 +343,9 @@ export default function NativeAdsPage({ params }: PageProps) {
   };
 
   const copyPrompt = async () => {
-    if (!parsed.brief?.prompt) return;
+    if (!displayBrief?.prompt) return;
     try {
-      await navigator.clipboard.writeText(parsed.brief.prompt);
+      await navigator.clipboard.writeText(displayBrief.prompt);
       setPromptCopied(true);
       setTimeout(() => setPromptCopied(false), 1500);
     } catch {
@@ -509,28 +579,55 @@ export default function NativeAdsPage({ params }: PageProps) {
             )}
 
             {/* ─── Card 2 — Image brief (separate, structured) ──────────── */}
-            {parsed.brief && (
+            {displayBrief && (
               <div className="mt-6">
-                <div className="flex items-center gap-3 mb-3">
-                  <h2 className="text-text-primary text-lg font-semibold">Image brief</h2>
-                  <span className="text-text-muted text-xs">pour Nanobanana</span>
+                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <h2 className="text-text-primary text-lg font-semibold">Image brief</h2>
+                    <span className="text-text-muted text-xs">pour Nanobanana</span>
+                    {briefHistory.length > 1 && (
+                      <span className="text-accent-violet text-[11px] font-semibold">
+                        Variante {briefHistory.findIndex((b) => b.prompt === displayBrief.prompt) + 1}/{briefHistory.length}
+                      </span>
+                    )}
+                    {altLoading && (
+                      <span className="text-accent-violet text-xs flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-accent-violet animate-pulse" />
+                        nouvelle image…
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={generateAltImage}
+                    disabled={altLoading || !parsed.adCopy.trim()}
+                    className="btn-secondary text-xs"
+                    title="Génère un AUTRE type d'image (autre moment du récit, autre réflexe SOP §6) — ce n'est pas une itération."
+                  >
+                    {altLoading ? '…' : '🎨 Autre type d\'image'}
+                  </button>
                 </div>
+
+                {altError && (
+                  <div className="mb-3 border border-accent-red/40 bg-accent-red/5 rounded-lg px-3 py-2">
+                    <p className="text-accent-red text-sm">{altError}</p>
+                  </div>
+                )}
 
                 <div className="card p-5 md:p-6 space-y-5 border-l-2 border-l-accent-violet/60">
                   {/* Concept */}
-                  {parsed.brief.concept && (
+                  {displayBrief.concept && (
                     <div>
                       <p className="text-text-muted text-[11px] uppercase tracking-widest font-semibold mb-1.5">
                         Concept de l'image
                       </p>
                       <p className="text-text-secondary text-sm leading-relaxed">
-                        {parsed.brief.concept}
+                        {displayBrief.concept}
                       </p>
                     </div>
                   )}
 
                   {/* Prompt — dedicated styled code block */}
-                  {parsed.brief.prompt && (
+                  {displayBrief.prompt && (
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
                         <p className="text-text-muted text-[11px] uppercase tracking-widest font-semibold">
@@ -541,20 +638,53 @@ export default function NativeAdsPage({ params }: PageProps) {
                         </button>
                       </div>
                       <pre className="bg-bg-base border border-bg-border rounded-lg p-4 text-text-primary text-xs md:text-sm font-mono whitespace-pre-wrap break-words leading-relaxed overflow-x-auto">
-                        {parsed.brief.prompt}
+                        {displayBrief.prompt}
                       </pre>
                     </div>
                   )}
 
                   {/* Why it works */}
-                  {parsed.brief.why && (
+                  {displayBrief.why && (
                     <div>
                       <p className="text-text-muted text-[11px] uppercase tracking-widest font-semibold mb-1.5">
                         Pourquoi cette image fonctionne
                       </p>
                       <p className="text-text-secondary text-sm leading-relaxed">
-                        {parsed.brief.why}
+                        {displayBrief.why}
                       </p>
+                    </div>
+                  )}
+
+                  {/* Variant switcher — when multiple briefs exist, let the
+                      user jump back to a previous variant. */}
+                  {briefHistory.length > 1 && (
+                    <div className="border-t border-bg-border pt-4">
+                      <p className="text-text-muted text-[11px] uppercase tracking-widest font-semibold mb-2">
+                        Variantes générées
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {briefHistory.map((b, i) => {
+                          const isActive = b.prompt === displayBrief.prompt;
+                          return (
+                            <button
+                              key={i}
+                              onClick={() => {
+                                if (isActive) return;
+                                setActiveBrief(b);
+                                void generateImage(b.prompt);
+                              }}
+                              className={`text-[11px] px-2.5 py-1 rounded border transition-colors ${
+                                isActive
+                                  ? 'bg-accent-violet/15 border-accent-violet/50 text-accent-violet'
+                                  : 'btn-secondary'
+                              }`}
+                              title={b.concept}
+                            >
+                              #{i + 1}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                 </div>
