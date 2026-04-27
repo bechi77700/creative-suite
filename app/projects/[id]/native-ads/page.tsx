@@ -14,6 +14,14 @@ import Sidebar from '@/components/Sidebar';
 import SaintGraalGate from '@/components/SaintGraalGate';
 import ReactMarkdown from 'react-markdown';
 import { parseSSE } from '@/lib/streaming';
+import { addWinner, removeWinner } from '@/lib/winners';
+
+interface Headline {
+  index: number;
+  principle: string;
+  principleCode: string;
+  text: string;
+}
 
 interface PageProps {
   params: { id: string };
@@ -108,6 +116,30 @@ export default function NativeAdsPage({ params }: PageProps) {
   const [imageError, setImageError] = useState('');
   const [imagePromptUsed, setImagePromptUsed] = useState('');
   const [imageFeedback, setImageFeedback] = useState('');
+
+  // ── Headlines (SOP §7) ───────────────────────────────────────────────────
+  const [headlines, setHeadlines] = useState<Headline[]>([]);
+  const [headlinesLoading, setHeadlinesLoading] = useState(false);
+  const [headlinesError, setHeadlinesError] = useState('');
+  const [headlinesGenerationId, setHeadlinesGenerationId] = useState<string | null>(null);
+  const [headlineCopied, setHeadlineCopied] = useState<number | null>(null);
+  // Map of headlineKey → winnerId (when marked as winner). null means in-flight.
+  const [headlineWinners, setHeadlineWinners] = useState<Record<string, string | null>>({});
+  // Standalone-mode form
+  const [showStandaloneForm, setShowStandaloneForm] = useState(false);
+  const [hlBrand, setHlBrand] = useState('');
+  const [hlAngle, setHlAngle] = useState('');
+  const [hlContext, setHlContext] = useState('');
+  const [hlCount, setHlCount] = useState(8);
+
+  const PRINCIPLE_COLORS: Record<string, string> = {
+    A: 'bg-blue-500/10 text-blue-300 border-blue-500/30',
+    B: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
+    C: 'bg-accent-violet/10 text-accent-violet border-accent-violet/30',
+    D: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
+    E: 'bg-fuchsia-500/10 text-fuchsia-300 border-fuchsia-500/30',
+    F: 'bg-rose-500/10 text-rose-300 border-rose-500/30',
+  };
 
   useEffect(() => {
     fetch(`/api/projects/${id}`)
@@ -252,6 +284,96 @@ export default function NativeAdsPage({ params }: PageProps) {
   };
 
   const wordCount = parsed.adCopy.trim() ? parsed.adCopy.trim().split(/\s+/).length : 0;
+
+  // ── Headlines actions ────────────────────────────────────────────────────
+  const generateHeadlines = async (mode: 'from_copy' | 'standalone') => {
+    if (headlinesLoading) return;
+    if (mode === 'from_copy' && !parsed.adCopy.trim()) return;
+    if (mode === 'standalone' && !hlAngle.trim()) {
+      setHeadlinesError('Angle requis en mode standalone.');
+      return;
+    }
+
+    setHeadlinesLoading(true);
+    setHeadlinesError('');
+    setHeadlines([]);
+    setHeadlinesGenerationId(null);
+    setHeadlineWinners({});
+
+    try {
+      const res = await fetch('/api/generate/native-headlines', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: id,
+          mode,
+          adCopy: mode === 'from_copy' ? stripBlockHeaders(parsed.adCopy) : undefined,
+          brand: hlBrand.trim() || undefined,
+          angle: hlAngle.trim() || undefined,
+          context: hlContext.trim() || undefined,
+          count: hlCount,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setHeadlines(data.headlines as Headline[]);
+      setHeadlinesGenerationId(data.generationId as string);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setHeadlinesError(message);
+    } finally {
+      setHeadlinesLoading(false);
+    }
+  };
+
+  const copyHeadline = async (h: Headline) => {
+    try {
+      await navigator.clipboard.writeText(h.text);
+      setHeadlineCopied(h.index);
+      setTimeout(() => setHeadlineCopied(null), 1200);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const headlineKey = (h: Headline) =>
+    `${headlinesGenerationId ?? 'na'}::${h.principleCode}::${h.index}`;
+
+  const toggleHeadlineWinner = async (h: Headline) => {
+    if (!headlinesGenerationId) return;
+    const key = headlineKey(h);
+    const currentId = headlineWinners[key];
+    if (currentId === null) return; // in flight
+
+    if (currentId) {
+      // Remove
+      setHeadlineWinners((prev) => ({ ...prev, [key]: null }));
+      const ok = await removeWinner(headlinesGenerationId, key);
+      setHeadlineWinners((prev) => {
+        const next = { ...prev };
+        if (ok) delete next[key];
+        else next[key] = currentId;
+        return next;
+      });
+    } else {
+      // Add
+      setHeadlineWinners((prev) => ({ ...prev, [key]: null }));
+      const result = await addWinner({
+        projectId: id,
+        generationId: headlinesGenerationId,
+        assetType: 'native_headline',
+        assetKey: key,
+        content: h.text,
+        meta: { principle: h.principle, principleCode: h.principleCode, index: h.index },
+      });
+      setHeadlineWinners((prev) => {
+        const next = { ...prev };
+        if (result?.id) next[key] = result.id;
+        else delete next[key];
+        return next;
+      });
+    }
+  };
 
   return (
     <div className="flex h-screen bg-bg-base overflow-hidden">
@@ -552,6 +674,192 @@ export default function NativeAdsPage({ params }: PageProps) {
                 </div>
               </div>
             )}
+
+            {/* ─── Card 4 — Headlines (SOP §7) ──────────────────────────── */}
+            <div className="mt-8">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-text-primary text-lg font-semibold">Headlines</h2>
+                  <span className="text-text-muted text-xs">SOP §7 · 5–10 variantes</span>
+                  {headlinesLoading && (
+                    <span className="text-accent-violet text-xs flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-accent-violet animate-pulse" />
+                      génération…
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="card p-5 md:p-6 space-y-4">
+                {/* CTA row */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {parsed.adCopy.trim() && (
+                    <button
+                      onClick={() => generateHeadlines('from_copy')}
+                      disabled={headlinesLoading}
+                      className="btn-primary text-sm"
+                    >
+                      {headlinesLoading ? 'Génération…' : '✨ Générer headlines depuis cette ad'}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowStandaloneForm((v) => !v)}
+                    className="btn-secondary text-sm"
+                  >
+                    {showStandaloneForm ? 'Masquer' : parsed.adCopy.trim() ? 'Mode standalone' : '✨ Générer headlines (standalone)'}
+                  </button>
+                  {!parsed.adCopy.trim() && (
+                    <p className="text-text-muted text-xs">
+                      Pas d'ad copy en session — utilise le mode standalone (marque + angle).
+                    </p>
+                  )}
+                </div>
+
+                {/* Standalone form */}
+                {showStandaloneForm && (
+                  <div className="border border-bg-border rounded-lg p-4 space-y-3 bg-bg-base/40">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-text-secondary text-xs font-semibold mb-1">
+                          Marque <span className="text-text-muted font-normal">(optionnel)</span>
+                        </label>
+                        <input
+                          type="text"
+                          className="input-field w-full text-sm"
+                          placeholder="Ex: Nuviya Papillon"
+                          value={hlBrand}
+                          onChange={(e) => setHlBrand(e.target.value)}
+                          disabled={headlinesLoading}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-text-secondary text-xs font-semibold mb-1">
+                          Nombre de variantes
+                        </label>
+                        <input
+                          type="number"
+                          min={5}
+                          max={10}
+                          className="input-field w-full text-sm"
+                          value={hlCount}
+                          onChange={(e) => setHlCount(Math.max(5, Math.min(10, parseInt(e.target.value) || 8)))}
+                          disabled={headlinesLoading}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-text-secondary text-xs font-semibold mb-1">
+                        Angle <span className="text-accent-red">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="input-field w-full text-sm"
+                        placeholder="Ex: perspective fille dont la mère ronfle, scène intime"
+                        value={hlAngle}
+                        onChange={(e) => setHlAngle(e.target.value)}
+                        disabled={headlinesLoading}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-text-secondary text-xs font-semibold mb-1">
+                        Contexte <span className="text-text-muted font-normal">(optionnel)</span>
+                      </label>
+                      <textarea
+                        className="input-field w-full text-sm min-h-[60px] resize-y"
+                        placeholder="Mécanique, public, ton particulier…"
+                        value={hlContext}
+                        onChange={(e) => setHlContext(e.target.value)}
+                        disabled={headlinesLoading}
+                      />
+                    </div>
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => generateHeadlines('standalone')}
+                        disabled={headlinesLoading || !hlAngle.trim()}
+                        className="btn-primary text-sm"
+                      >
+                        {headlinesLoading ? 'Génération…' : '✨ Générer'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Error */}
+                {headlinesError && (
+                  <div className="border border-accent-red/40 bg-accent-red/5 rounded-lg px-3 py-2">
+                    <p className="text-accent-red text-sm">{headlinesError}</p>
+                  </div>
+                )}
+
+                {/* Headlines list */}
+                {headlines.length > 0 && (
+                  <ul className="space-y-2 pt-1">
+                    {headlines.map((h) => {
+                      const key = headlineKey(h);
+                      const winnerState = headlineWinners[key];
+                      const isWinner = !!winnerState;
+                      const inFlight = winnerState === null;
+                      const colorClass =
+                        PRINCIPLE_COLORS[h.principleCode] ??
+                        'bg-bg-hover text-text-secondary border-bg-border';
+                      return (
+                        <li
+                          key={key}
+                          className="border border-bg-border rounded-lg p-3 md:p-4 bg-bg-base/40 hover:bg-bg-base/70 transition-colors"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                                <span className="text-text-muted text-[11px] font-mono">
+                                  #{h.index}
+                                </span>
+                                <span
+                                  className={`text-[10px] uppercase tracking-wider font-semibold border rounded px-1.5 py-0.5 ${colorClass}`}
+                                  title={`Principe ${h.principleCode}`}
+                                >
+                                  {h.principleCode} · {h.principle}
+                                </span>
+                              </div>
+                              <p className="text-text-primary text-base md:text-lg leading-snug font-serif">
+                                {h.text}
+                              </p>
+                            </div>
+                            <div className="flex flex-col gap-1.5 shrink-0">
+                              <button
+                                onClick={() => copyHeadline(h)}
+                                className="btn-secondary text-[11px] px-2 py-1"
+                              >
+                                {headlineCopied === h.index ? '✓' : 'Copier'}
+                              </button>
+                              <button
+                                onClick={() => toggleHeadlineWinner(h)}
+                                disabled={inFlight || !headlinesGenerationId}
+                                className={`text-[11px] px-2 py-1 rounded border transition-colors ${
+                                  isWinner
+                                    ? 'bg-accent-gold/15 border-accent-gold/50 text-accent-gold'
+                                    : 'btn-secondary'
+                                }`}
+                                title={isWinner ? 'Retirer des winners' : 'Marquer comme winner'}
+                              >
+                                {inFlight ? '…' : isWinner ? '★ Winner' : '☆ Winner'}
+                              </button>
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+
+                {/* Empty state when nothing generated yet */}
+                {headlines.length === 0 && !headlinesLoading && !headlinesError && (
+                  <p className="text-text-muted text-xs">
+                    Génère 5 à 10 headlines courtes (3–12 mots), chacune taggée avec son principe systémique
+                    (filtre audience / autorité / mystère / citation / recadrage / découverte).
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
         </main>
       )}

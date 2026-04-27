@@ -4,7 +4,7 @@
 export interface WinnerInput {
   projectId: string;
   generationId?: string;
-  assetType: 'hook' | 'video_script' | 'static' | 'iterate';
+  assetType: 'hook' | 'video_script' | 'static' | 'iterate' | 'native_headline';
   assetKey: string;
   content: string;
   imageUrl?: string;
