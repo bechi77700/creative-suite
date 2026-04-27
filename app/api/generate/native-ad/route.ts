@@ -1,22 +1,29 @@
 // Native Ads generator — long-form (1500-3500 words) editorial-style ads.
 //
-// Streams a complete native ad in the architecture defined by the
-// NATIVE_ADS_COMPLETE.md SOP (uploaded by the user into the `native_ads`
-// KB category). Output ends with a separate "IMAGE BRIEF" block that
-// gives a Nanobanana prompt for the accompanying organic-feeling image.
+// The NATIVE_ADS_COMPLETE.md SOP (uploaded to the `native_ads` KB
+// category) is the single source of truth for the mechanic. This route
+// hardcodes a thin scaffold ON TOP of the SOP — it restates the 9-block
+// architecture (now flexible per SOP v1.1) and the visual-formatting
+// rule with extra emphasis, and it pins down a parsing contract so the
+// page can split copy from image brief.
+//
+// Per SOP v1.1, block names are:
+//   A — Hook narratif
+//   B — Mise en scène personnelle
+//   C — Le parcours d'échec
+//   D — Le moment de bascule
+//   E — La révélation mécaniste (le "WHY")
+//   F — La découverte du produit
+//   G — La preuve par expérience
+//   H — L'adresse directe au lecteur
+//   I — Le CTA + projection émotionnelle
 //
 // Contract:
 //   POST { projectId, product, additionalContext? }
 //   → SSE stream: event "text" { text }, event "done" {}, event "error"
-//   → On done, persists a Generation row (module: 'native', type: 'native_ad').
+//   → On done, persists a Generation row (module: 'native').
 //
-// Notes:
-// - MODEL_FAST (Sonnet) — long-form is expensive on Opus. Sonnet handles the
-//   9-block narrative well given the SOP+references in the cached prefix.
-//   No funnel / language selector: brand+market come from Saint Graal;
-//   native ads default to TOFU.
-// - Saint Graal is required, same gate as video/static.
-// - Prompt cache on KB+SOP+brand docs (the heavy stable prefix).
+// Model: MODEL_FAST (Sonnet 4.6). Prompt-cached prefix on KB+brand docs.
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -85,37 +92,76 @@ TASK — WRITE ONE COMPLETE NATIVE AD
 PRODUCT TO ADVERTISE:
 ${product.trim()}
 
-${additionalContext?.trim() ? `ADDITIONAL CONTEXT / ANGLE DIRECTION:\n${additionalContext.trim()}\n` : ''}
-─────────────────────────────────────────────
+${additionalContext?.trim() ? `ADDITIONAL CONTEXT / ANGLE DIRECTION:\n${additionalContext.trim()}\n\n` : ''}─────────────────────────────────────────────
 RULES (non-negotiable)
 ─────────────────────────────────────────────
-1. FOLLOW THE SOP. The NATIVE ADS SOP in the knowledge base above defines the
-   mechanics (4 pillars, 9-block architecture, voice, image rules). Apply the
-   PRINCIPLES — do not copy the references verbatim. Invent a new character,
-   a new pivot moment, a new mechanism story.
+1. FOLLOW THE SOP. The NATIVE ADS SOP above is the source of truth for the
+   mechanic (4 psychological pillars, 9-block architecture, voice, image
+   system, anti-patterns). Apply its PRINCIPLES — do not clone the 7 gold
+   references. Invent a new character, a new authority, a new pivot moment,
+   a new mechanism story.
 
-2. LANGUAGE & MARKET. Infer the language and market from the Saint Graal.
-   The ad must read as if written by a native speaker of that market, in the
+2. LANGUAGE & MARKET. Infer language and market from the Saint Graal. The ad
+   must read as if written by a native speaker of that market, in the
    register of an editorial / first-person testimonial — not an ad.
 
 3. AWARENESS. Default to TOFU (problem-aware → solution-aware). The reader
-   does not yet know your product. The ad earns the click by telling a story,
-   not by pitching.
+   does not yet know your product. The ad earns the click by telling a story.
 
 4. LENGTH. 1500–3500 words. Long enough to immerse, short enough to finish.
 
-5. STRUCTURE. Use the 9-block architecture from the SOP (A → I), but adapt
-   block order/length to the product. Block headers in the output are OK
-   (markdown ## A — Hook narratif, etc.) — they help downstream editing.
+5. ARCHITECTURE. Use the 9-block scaffold from the SOP (A→I), but the SOP
+   is explicit that this scaffold is FLEXIBLE: blocks may be merged, moved,
+   or omitted if the story calls for it. Adapt to the product, do not force.
 
-6. DO NOT mention the product brand by name before block F (mechanism reveal).
-   The first half is pure story / authority / discovery.
+6. DO NOT mention the product or brand by name before the SECOND HALF of
+   the ad. The first half is pure story / authority / mechanism setup.
 
-7. NO generic claims. Every benefit must be tied to a specific scene, a
-   specific person (named, age, location), a specific moment of bascule.
+7. NO generic claims. Every benefit ties to a specific scene, a specific
+   person (named, age, location), a specific moment of bascule. At least 3
+   real brands cited in the parcours d'échec. At least 2 odd, non-rounded
+   numbers (47% > 50%). At least one precise hour/date/place at the bascule.
 
-8. CTA must feel earned, not pushed. Mirror the references: a soft pivot to
-   "here's where I got it / here's the link" — not "BUY NOW LIMITED OFFER".
+8. CTA must feel earned, not pushed. A soft pivot to "here's where I got it"
+   — never "BUY NOW LIMITED OFFER". Optional 1-2 P.S. at the end.
+
+─────────────────────────────────────────────
+🔥 RULE #0 — VISUAL FORMATTING (the most important rule of the SOP)
+─────────────────────────────────────────────
+This is the signature visual of a native ad. NON-NEGOTIABLE.
+
+- Line break after almost every sentence.
+- 1 sentence = 1 paragraph in roughly 80% of the copy.
+- Maximum 2-3 short sentences grouped together if they form a single micro-thought.
+- Impact lines (2-3 words) stand alone on their own line: "Rien." / "Three years." / "À vie." / "Quietly."
+- Dialogues line by line, one paragraph per line of dialogue.
+- Enumerations as individual paragraphs, not comma-separated lists.
+
+VALIDATION TEST: scroll the output mentally on a phone. If it looks like a
+blog article (dense paragraphs of 3+ glued sentences), REWRITE IT before
+emitting. If it looks like a long organic Facebook/Reddit post, ship it.
+
+If you produce dense paragraphs, the ad fails — even if the content is great.
+
+─────────────────────────────────────────────
+🚫 RULE #0 BIS — IMAGE: PRODUCT IS NEVER THE STAR
+─────────────────────────────────────────────
+- No packshot. No product staging. No hero shot. No centered product.
+- Subject = the problem, a moment of the story, a visceral proof, an
+  intimate scene, an authority figure. NEVER the product itself.
+- The product may appear in the background as an everyday object (rare
+  exception), but never centered.
+- The image must trigger ONE of these 4 reflexes in the scroller:
+  • "C'est quoi ce truc ?"  (visual friction / curiosity)
+  • "Ça pourrait être moi"  (immediate identification)
+  • "Beurk / wow"           (visceral reaction)
+  • "C'est pas une pub"     (radical authenticity, disarms the ad filter)
+- If none of the 4 reflexes fire → the image fails.
+- Photo must respect the 5 systemic principles from SOP §6: visual friction,
+  radical authenticity, intimate intrusion, visceral proof, focus displacement.
+- Format: 1:1 square OR 4:5 vertical. NEVER 16:9. iPhone-authentic look —
+  grain OK, imperfect framing OK, natural light, no studio, no filter, no
+  text on image, no logo, no pro model.
 
 ─────────────────────────────────────────────
 OUTPUT FORMAT
@@ -125,48 +171,51 @@ OUTPUT FORMAT
 *Sous-titre éditorial style si pertinent*
 
 ## A — Hook narratif
-[...]
+[1ère personne, tension ou contradiction immédiate]
 
 ## B — Mise en scène personnelle
-[...]
+[Qui parle, enjeu humain, détails ultra-spécifiques — prénoms, âges, lieux, durées]
 
 ## C — Le parcours d'échec
-[...]
+[Solutions essayées, prix exacts, marques RÉELLES de la niche, durées précises, coût total cumulé]
 
 ## D — Le moment de bascule
-[...]
+[Un événement précis, toujours par hasard, avec heure/date/lieu précis]
 
-## E — La rencontre avec l'autorité / la découverte
-[...]
+## E — La révélation mécaniste (le "WHY")
+[Explication scientifique/mécanique vraie ou plausible — pourquoi le problème existe, pourquoi les autres solutions échouent, pourquoi la nouvelle approche fonctionne]
 
-## F — Le mécanisme révélé
-[Premier endroit où le produit / la marque peut apparaître]
+## F — La découverte du produit
+[Première mention du produit ICI, jamais avant. Présenté comme alternative invisible que personne ne mentionne. Mentionner versions cheap qui échouent. Justifier le prix par contraste.]
 
-## G — La transformation / les preuves
-[...]
+## G — La preuve par expérience
+[Récit jour par jour, réactions des proches, données mesurables, validation par autorité tierce]
 
-## H — La validation sociale / l'élargissement
-[...]
+## H — L'adresse directe au lecteur
+[Transition de "je" à "vous". Reconnaissance de la souffrance. "Ce n'est pas votre faute".]
 
-## I — La pivot CTA douce
-[...]
+## I — Le CTA + projection émotionnelle
+[Projection dans le futur, description sensorielle de la vie après, garantie / risque zéro. Optionnel: 1-2 P.S.]
 
 ---
 
 # IMAGE BRIEF (pour Nanobanana)
 
 **Concept de l'image** :
-[Une phrase qui décrit la scène — doit être cohérente avec le hook et le bloc B. Organique, pas studio. Voir SOP §6 sur l'imagerie.]
+[Une ou deux phrases. Le moment du récit illustré (souffrance / découverte / preuve / scène intime / détail mécaniste). PAS le produit. Précise quel(s) principe(s) du SOP §6 sont activés et quel(s) réflexe(s) sont visés.]
 
 **Prompt Nanobanana** :
 \`\`\`
-[Prompt complet, anglais, prêt à coller dans Nanobanana — détails de cadrage,
-lumière naturelle, éléments de scène, expression du personnage, style photo
-amateur / journalistique. Pas de texte sur l'image. Pas de logo.]
+[Prompt complet en anglais, prêt à coller dans Nano-Banana 2. Détails de
+cadrage (square 1:1 OR 4:5 vertical), lumière naturelle, éléments de scène,
+expression du personnage, look photo amateur / iPhone authentique. Inclure
+explicitement: no text on image, no logo, no studio lighting, no pro model,
+no product packshot. Le prompt doit être généré dynamiquement à partir du
+moment du récit choisi — pas un template.]
 \`\`\`
 
 **Pourquoi cette image fonctionne** :
-[2-3 lignes — quel pilier psychologique elle active, pourquoi elle ne ressemble pas à une pub.]`;
+[2-3 lignes — quel(s) principe(s) du SOP §6 (friction visuelle / authenticité radicale / intrusion intime / preuve viscérale / déplacement du focus) et quel(s) réflexe(s) parmi les 4 elle déclenche.]`;
 
   const anthropic = getAnthropic();
   const encoder = new TextEncoder();
