@@ -290,15 +290,31 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
     }
   };
 
-  const generateScript = async () => {
-    // Build the list of (angleText, angleTitle) tuples to fan out.
+  // mode='per-angle' (default) → 1 script per checked angle, fan-out parallel.
+  // mode='combined'             → 1 single script that fuses all checked angles
+  //                               into one cohesive story (the model is told
+  //                               to weave them, not list them separately).
+  // 0-1 angles checked          → falls back to the textarea content.
+  const generateScript = async (mode: 'per-angle' | 'combined' = 'per-angle') => {
     const checkedAngles = parsedAngles.filter((a) => checkedAngleIds.has(a.id));
-    const jobs: Array<{ text: string; title: string }> =
-      checkedAngles.length >= 2
-        ? checkedAngles.map((a) => ({ text: a.full, title: a.title }))
-        : selectedAngle.trim()
-          ? [{ text: selectedAngle, title: checkedAngles[0]?.title ?? '' }]
-          : [];
+
+    let jobs: Array<{ text: string; title: string }> = [];
+
+    if (checkedAngles.length >= 2 && mode === 'combined') {
+      // One script, fused — prefix the angle payload with an instruction so
+      // the model interleaves them into a single cohesive script instead of
+      // producing N labeled sections.
+      const fused =
+        `INSTRUCTION: weave the following ${checkedAngles.length} angles into ONE single, cohesive script. Do NOT label them separately. Pick the strongest hook, then layer the supporting angles as proof points / pivots inside one continuous narrative.\n\n` +
+        checkedAngles.map((a, i) => `### Angle ${i + 1} — ${a.title}\n${a.full}`).join('\n\n');
+      const title = `Combined: ${checkedAngles.map((a) => a.title).join(' + ')}`;
+      jobs = [{ text: fused, title }];
+    } else if (checkedAngles.length >= 2) {
+      // per-angle fan-out
+      jobs = checkedAngles.map((a) => ({ text: a.full, title: a.title }));
+    } else if (selectedAngle.trim()) {
+      jobs = [{ text: selectedAngle, title: checkedAngles[0]?.title ?? '' }];
+    }
     if (jobs.length === 0) return;
 
     const baseTs = Date.now();
@@ -580,7 +596,8 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
                   <div className="mt-2 px-2.5 py-2 rounded border border-accent-violet/40 bg-accent-violet/5">
                     <p className="text-accent-violet text-[11px] leading-snug">
                       <span className="font-semibold">{checkedAngleIds.size} angles cochés</span> —
-                      {' '}1 script séparé sera généré pour chaque angle (en parallèle). Le textarea ci-dessus est ignoré.
+                      {' '}choisis ci-dessous : un script par angle, ou un seul script qui combine les {checkedAngleIds.size} angles.
+                      {' '}Le textarea est ignoré dans les deux cas.
                     </p>
                   </div>
                 )}
@@ -594,17 +611,35 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
                     onChange={(e) => setAdditionalContext(e.target.value)}
                   />
                 </div>
-                <button
-                  onClick={generateScript}
-                  className="btn-primary w-full mt-3"
-                  disabled={anyLoading || (checkedAngleIds.size < 2 && !selectedAngle.trim())}
-                >
-                  {anyLoading
-                    ? 'Writing scripts…'
-                    : checkedAngleIds.size >= 2
-                      ? `Generate ${checkedAngleIds.size} Scripts (1 par angle) →`
-                      : 'Generate Script →'}
-                </button>
+
+                {checkedAngleIds.size >= 2 ? (
+                  <div className="mt-3 space-y-1.5">
+                    <button
+                      onClick={() => generateScript('per-angle')}
+                      className="btn-primary w-full"
+                      disabled={anyLoading}
+                      title="Une requête séparée par angle, en parallèle. Idéal pour comparer."
+                    >
+                      {anyLoading ? 'Writing…' : `→ ${checkedAngleIds.size} scripts (1 par angle)`}
+                    </button>
+                    <button
+                      onClick={() => generateScript('combined')}
+                      className="btn-secondary w-full"
+                      disabled={anyLoading}
+                      title="1 seul script qui combine les angles cochés en une narration cohérente."
+                    >
+                      {anyLoading ? 'Writing…' : `⚡ 1 script (${checkedAngleIds.size} angles combinés)`}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => generateScript('per-angle')}
+                    className="btn-primary w-full mt-3"
+                    disabled={anyLoading || !selectedAngle.trim()}
+                  >
+                    {anyLoading ? 'Writing script…' : 'Generate Script →'}
+                  </button>
+                )}
               </div>
             )}
           </div>
