@@ -76,6 +76,9 @@ interface ScriptRun {
   id: string;
   format: string;
   length: string;
+  // Label shown in the card header — the angle title when generated from a
+  // checkbox, empty string when the user typed a custom angle in the textarea.
+  angleTitle: string;
   output: string;
   generationId: string;
   isWinner: boolean;
@@ -249,25 +252,16 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
     }
   };
 
-  const generateScript = async () => {
-    if (!selectedAngle.trim()) return;
-    const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const newRun: ScriptRun = {
-      id: runId,
-      format: selectedFormat,
-      length: selectedLength,
-      output: '',
-      generationId: '',
-      isWinner: false,
-      variationsOutput: '',
-      variationsLoading: false,
-      loading: true,
-      error: '',
-      feedback: '',
-      refining: false,
-    };
-    setRuns((prev) => [newRun, ...prev]);
-
+  // Generate one script per checked angle, in parallel.
+  // If 0 or 1 angle is checked, the textarea content is used as the angle
+  // (single script). When 2+ angles are checked, we fan out — one ScriptRun
+  // per angle, so the user gets one dedicated script per angle (no mixing)
+  // and each script keeps its own "5 Variations" / "Refine" / "Winner"
+  // controls independently.
+  const runOneScript = async (
+    runId: string,
+    angleText: string,
+  ) => {
     try {
       const res = await fetch('/api/generate/video-script', {
         method: 'POST',
@@ -276,7 +270,7 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
           projectId: id,
           format: selectedFormat,
           length: selectedLength,
-          angle: selectedAngle,
+          angle: angleText,
           additionalContext,
           funnelStage,
         }),
@@ -290,11 +284,45 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
           generationId: data.generationId,
           loading: false,
         });
-        setStep(4);
       }
     } catch {
       updateRun(runId, { error: 'Network error — check the console.', loading: false });
     }
+  };
+
+  const generateScript = async () => {
+    // Build the list of (angleText, angleTitle) tuples to fan out.
+    const checkedAngles = parsedAngles.filter((a) => checkedAngleIds.has(a.id));
+    const jobs: Array<{ text: string; title: string }> =
+      checkedAngles.length >= 2
+        ? checkedAngles.map((a) => ({ text: a.full, title: a.title }))
+        : selectedAngle.trim()
+          ? [{ text: selectedAngle, title: checkedAngles[0]?.title ?? '' }]
+          : [];
+    if (jobs.length === 0) return;
+
+    const baseTs = Date.now();
+    const newRuns: ScriptRun[] = jobs.map((j, i) => ({
+      id: `run-${baseTs}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+      format: selectedFormat,
+      length: selectedLength,
+      angleTitle: j.title,
+      output: '',
+      generationId: '',
+      isWinner: false,
+      variationsOutput: '',
+      variationsLoading: false,
+      loading: true,
+      error: '',
+      feedback: '',
+      refining: false,
+    }));
+    // Prepend in original order — newest run is the first angle.
+    setRuns((prev) => [...newRuns, ...prev]);
+    setStep(4);
+
+    // Fire all in parallel — each script writes back into its own run id.
+    await Promise.all(newRuns.map((r, i) => runOneScript(r.id, jobs[i].text)));
   };
 
   const toggleWinner = async (runId: string, generationId: string) => {
@@ -548,6 +576,14 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
                   value={selectedAngle}
                   onChange={(e) => setSelectedAngle(e.target.value)}
                 />
+                {checkedAngleIds.size >= 2 && (
+                  <div className="mt-2 px-2.5 py-2 rounded border border-accent-violet/40 bg-accent-violet/5">
+                    <p className="text-accent-violet text-[11px] leading-snug">
+                      <span className="font-semibold">{checkedAngleIds.size} angles cochés</span> —
+                      {' '}1 script séparé sera généré pour chaque angle (en parallèle). Le textarea ci-dessus est ignoré.
+                    </p>
+                  </div>
+                )}
                 <div>
                   <label className="text-text-muted text-xs mb-1.5 block mt-3">Additional Context</label>
                   <textarea
@@ -561,9 +597,13 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
                 <button
                   onClick={generateScript}
                   className="btn-primary w-full mt-3"
-                  disabled={anyLoading || !selectedAngle.trim()}
+                  disabled={anyLoading || (checkedAngleIds.size < 2 && !selectedAngle.trim())}
                 >
-                  {anyLoading ? 'Writing script…' : 'Generate Script →'}
+                  {anyLoading
+                    ? 'Writing scripts…'
+                    : checkedAngleIds.size >= 2
+                      ? `Generate ${checkedAngleIds.size} Scripts (1 par angle) →`
+                      : 'Generate Script →'}
                 </button>
               </div>
             )}
@@ -839,6 +879,9 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
                   <div className="text-center">
                     <div className="w-8 h-8 border-2 border-accent-gold/30 border-t-accent-gold rounded-full animate-spin mx-auto mb-3" />
                     <p className="text-text-secondary text-sm">Writing your script…</p>
+                    {run.angleTitle && (
+                      <p className="text-accent-violet text-xs mt-1.5">↳ {run.angleTitle}</p>
+                    )}
                   </div>
                 </div>
               )}
@@ -847,9 +890,16 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
                 <>
                   <div className="card">
                     <div className="flex items-center justify-between px-4 py-3 border-b border-bg-border">
-                      <div>
-                        <span className="text-text-muted text-xs uppercase tracking-widest">Script</span>
-                        <span className="text-text-muted text-xs ml-3">{run.format} · {run.length}</span>
+                      <div className="min-w-0 flex-1 mr-3">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span className="text-text-muted text-xs uppercase tracking-widest">Script</span>
+                          <span className="text-text-muted text-xs">{run.format} · {run.length}</span>
+                        </div>
+                        {run.angleTitle && (
+                          <p className="text-accent-violet text-xs mt-0.5 truncate" title={run.angleTitle}>
+                            ↳ {run.angleTitle}
+                          </p>
+                        )}
                       </div>
                       <div className="flex gap-2 items-center">
                         {run.generationId && (
