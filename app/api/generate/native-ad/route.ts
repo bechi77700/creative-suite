@@ -130,18 +130,38 @@ RULES (non-negotiable)
 ─────────────────────────────────────────────
 This is the signature visual of a native ad. NON-NEGOTIABLE.
 
-- Line break after almost every sentence.
+- DOUBLE line break between sentences — i.e. a fully blank line between
+  each sentence (Markdown paragraph break). NOT a single \\n soft break.
 - 1 sentence = 1 paragraph in roughly 80% of the copy.
-- Maximum 2-3 short sentences grouped together if they form a single micro-thought.
-- Impact lines (2-3 words) stand alone on their own line: "Rien." / "Three years." / "À vie." / "Quietly."
-- Dialogues line by line, one paragraph per line of dialogue.
-- Enumerations as individual paragraphs, not comma-separated lists.
+- Maximum 2-3 short sentences grouped together ONLY if they form a single
+  micro-thought (rare; default to one-sentence paragraphs).
+- Impact lines (2-3 words) stand alone on their own paragraph, separated
+  by blank lines above and below: "Rien." / "Three years." / "À vie." / "Quietly."
+- Dialogues: one paragraph per line of dialogue, blank line between each.
+- Enumerations as individual paragraphs (each separated by a blank line),
+  NOT comma-separated lists, NOT bullet lists glued together.
 
-VALIDATION TEST: scroll the output mentally on a phone. If it looks like a
-blog article (dense paragraphs of 3+ glued sentences), REWRITE IT before
-emitting. If it looks like a long organic Facebook/Reddit post, ship it.
+CONCRETE EXAMPLE — what the spacing must look like in the output:
 
-If you produce dense paragraphs, the ad fails — even if the content is great.
+❌ WRONG (single \\n — sentences are visually glued):
+Phrase 1
+Phrase 2
+Phrase 3
+
+✅ RIGHT (double \\n — blank line between every sentence):
+Phrase 1
+
+Phrase 2
+
+Phrase 3
+
+VALIDATION TEST: scroll the output mentally on a phone. Every sentence
+must be visually isolated by a blank line above and below. If sentences
+are stacked without empty lines between them — even if each is on its
+own line — that is WRONG and you must rewrite before emitting.
+
+If you produce dense paragraphs OR single-line-break stacking, the ad
+fails — even if the content is great.
 
 ─────────────────────────────────────────────
 🚫 RULE #0 BIS — IMAGE: PRODUCT IS NEVER THE STAR
