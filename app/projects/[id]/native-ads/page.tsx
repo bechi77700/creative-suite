@@ -219,7 +219,7 @@ export default function NativeAdsPage({ params }: PageProps) {
 
               <div className="flex items-center justify-between pt-1">
                 <p className="text-text-muted text-xs">
-                  Modèle: <span className="text-text-secondary font-medium">Claude Opus 4.7</span> · Streaming · ~2-4 min
+                  Modèle: <span className="text-text-secondary font-medium">Claude Sonnet 4.6</span> · Streaming · ~1-2 min
                 </p>
                 <button
                   onClick={generate}
