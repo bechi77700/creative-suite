@@ -23,11 +23,11 @@
 //   → SSE stream: event "text" { text }, event "done" {}, event "error"
 //   → On done, persists a Generation row (module: 'native').
 //
-// Model: MODEL_FAST (Sonnet 4.6). Prompt-cached prefix on KB+brand docs.
+// Model: MODEL_SMART (Opus 4.7). Prompt-cached prefix on KB+brand docs.
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getAnthropic, MODEL_FAST, GENERATION_RULES } from '@/lib/anthropic';
+import { getAnthropic, MODEL_SMART, GENERATION_RULES } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
 
@@ -252,9 +252,9 @@ réflexe(s) parmi les 4 elle déclenche.]`;
     async start(controller) {
       try {
         const messageStream = anthropic.messages.stream({
-          model: MODEL_FAST,
+          model: MODEL_SMART,
           // 32k = comfortable ceiling for very long native ads (5000+ words)
-          // plus the IMAGE BRIEF. Sonnet 4.6 supports up to 64k output tokens.
+          // plus the IMAGE BRIEF. Opus 4.7 supports 32k output tokens.
           max_tokens: 32000,
           messages: [
             {

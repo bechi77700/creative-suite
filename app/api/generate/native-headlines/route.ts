@@ -21,12 +21,12 @@
 //   }
 //   → { headlines: [{ index, principle, principleCode, text }], generationId }
 //
-// Model: MODEL_FAST (Sonnet 4.6). Same Saint Graal gate + KB injection
+// Model: MODEL_SMART (Opus 4.7). Same Saint Graal gate + KB injection
 // as the long-form route, but a much smaller prompt.
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getAnthropic, MODEL_FAST, GENERATION_RULES } from '@/lib/anthropic';
+import { getAnthropic, MODEL_SMART, GENERATION_RULES } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
 
@@ -227,7 +227,7 @@ Rules for the output:
 Begin now.`;
 
     const response = await getAnthropic().messages.create({
-      model: MODEL_FAST,
+      model: MODEL_SMART,
       max_tokens: 1500,
       messages: [
         {

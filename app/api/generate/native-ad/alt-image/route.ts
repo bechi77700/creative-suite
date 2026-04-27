@@ -14,11 +14,11 @@
 //   POST { projectId, adCopy, previousBriefs?: { concept, prompt, why }[] }
 //   → JSON { concept, prompt, why }
 //
-// Model: MODEL_FAST. Prompt-cached prefix on KB+brand docs.
+// Model: MODEL_SMART. Prompt-cached prefix on KB+brand docs.
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getAnthropic, MODEL_FAST, GENERATION_RULES } from '@/lib/anthropic';
+import { getAnthropic, MODEL_SMART, GENERATION_RULES } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
 
@@ -160,7 +160,7 @@ quoi elle est DIFFÉRENTE des images précédentes.]`;
   try {
     const anthropic = getAnthropic();
     const response = await anthropic.messages.create({
-      model: MODEL_FAST,
+      model: MODEL_SMART,
       max_tokens: 2000,
       messages: [
         {
