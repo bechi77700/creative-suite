@@ -178,9 +178,9 @@ amateur / journalistique. Pas de texte sur l'image. Pas de logo.]
       try {
         const messageStream = anthropic.messages.stream({
           model: MODEL_FAST,
-          // 16k gives Sonnet enough room for a 3500-word ad + the IMAGE BRIEF
-          // block at the end. 8k was getting cut off mid-sentence.
-          max_tokens: 16000,
+          // 32k = comfortable ceiling for very long native ads (5000+ words)
+          // plus the IMAGE BRIEF. Sonnet 4.6 supports up to 64k output tokens.
+          max_tokens: 32000,
           messages: [
             {
               role: 'user',
