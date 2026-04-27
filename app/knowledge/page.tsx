@@ -18,6 +18,7 @@ const CATEGORIES = [
   { value: 'hook_swipe_file', label: 'Hook Swipe File', icon: '⚡' },
   { value: 'meta_ads_principles', label: 'Meta Ads Principles', icon: '📊' },
   { value: 'static_ads', label: 'Static Ads', icon: '▣' },
+  { value: 'native_ads', label: 'Native Ads', icon: '📰' },
 ];
 
 const CAT_COLORS: Record<string, string> = {
@@ -26,6 +27,7 @@ const CAT_COLORS: Record<string, string> = {
   hook_swipe_file: 'text-accent-blue border-accent-blue/30 bg-accent-blue/10',
   meta_ads_principles: 'text-accent-green border-accent-green/30 bg-accent-green/10',
   static_ads: 'text-accent-red border-accent-red/30 bg-accent-red/10',
+  native_ads: 'text-accent-violet border-accent-violet/30 bg-accent-violet/10',
 };
 
 export default function KnowledgePage() {

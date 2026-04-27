@@ -65,6 +65,13 @@ const Icon = {
       <path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.7-6.2 3.7 1.6-7L2 9.2l7.1-.6L12 2z" />
     </svg>
   ),
+  newspaper: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+      <path d="M4 4h13a2 2 0 0 1 2 2v13a1 1 0 0 0 1 1h0a1 1 0 0 0 1-1V8" />
+      <path d="M4 4v15a1 1 0 0 0 1 1h14" />
+      <path d="M8 8h7M8 12h7M8 16h4" />
+    </svg>
+  ),
 };
 
 const overviewItems: NavItem[] = [
@@ -77,6 +84,7 @@ const moduleItems = [
   { label: 'Iterate', icon: Icon.refresh, path: 'iterate' },
   { label: 'Video Script', icon: Icon.video, path: 'video-script' },
   { label: 'Hook Generator', icon: Icon.zap, path: 'hooks' },
+  { label: 'Native Ads', icon: Icon.newspaper, path: 'native-ads' },
   { label: 'Winners', icon: Icon.star, path: 'winners' },
   { label: 'History', icon: Icon.history, path: 'history' },
 ];

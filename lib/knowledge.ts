@@ -25,10 +25,11 @@ export const UNIVERSAL_CATEGORIES = ['copywriting_books', 'meta_ads_principles']
 // Module-specific categories. A route declares which module it serves
 // (hooks / static / video), and we inject only that module's categories
 // + the universal ones.
-export const MODULE_CATEGORIES: Record<'hooks' | 'static' | 'video', string[]> = {
+export const MODULE_CATEGORIES: Record<'hooks' | 'static' | 'video' | 'native', string[]> = {
   hooks: ['hook_swipe_file'],
   static: ['static_ads'],
   video: ['video_frameworks'],
+  native: ['native_ads'],
 };
 
 export type KnowledgeModule = keyof typeof MODULE_CATEGORIES;
