@@ -164,99 +164,28 @@ If you produce dense paragraphs OR single-line-break stacking, the ad
 fails — even if the content is great.
 
 ─────────────────────────────────────────────
-🚫 RULE #0 BIS — IMAGE: THE PRODUCT IS NEVER VISIBLE. AT ALL.
+🚫 RULE #0 BIS — IMAGE: APPLY SOP §6 STRICTLY
 ─────────────────────────────────────────────
 
-ABSOLUTE BAN — the product, its packaging, its bottle, its tube, its jar,
-its box, its pillow, its mask, its capsule, its label, its branding,
-its logo, or ANY recognizable form of it MUST NOT APPEAR in the image.
-Not centered. Not in the background. Not on a shelf. Not in a hand.
-Not on a table. Not blurred behind a person. NEVER. PERIOD.
+The NATIVE ADS SOP (§6 — "STANDARDISATION DES IMAGES") above is the
+single source of truth for the image. Apply it without softening:
 
-If you write a Nanobanana prompt that contains words like "bottle",
-"jar", "pillow", "mask", "tube", "capsule", "softgel", "pill", "package",
-"box", "label", "supplement bottle", or the brand/product name as the
-subject of the image — the image FAILS. Rewrite before emitting.
+- The 4 réflexes (§6 "LE SYSTÈME UNIVERSEL") — at least one must fire.
+- The 5 principes systémiques (§6 "LES 5 PRINCIPES…") — including
+  Principe 5: "Le sujet de l'image n'est jamais le produit."
+- The 5-step method (§6 "COMMENT INVENTER UNE IMAGE…") — pick the
+  moment of the story FIRST, then the principles, then invent the image.
+  You have full creative freedom to invent new images as long as the
+  principles are respected.
+- The règles photo absolues (§6) — no packshot, no logo, no text on
+  image (except medical labels A/B/arrows), no Instagram filter, no
+  pro model, no studio lighting, "iPhone authentique" look.
+- Format: ALWAYS 1:1 square (overrides the SOP's "1:1 ou 4:5" — for
+  this generator we lock to 1:1).
 
-─── STEP 1 — PICK THE NARRATIVE MOMENT FIRST ───────────────────────
-
-Before writing a single word of the Nanobanana prompt, identify ONE
-specific moment from the ad copy you just wrote. Pick from:
-
-  • SUFFERING MOMENT — the protagonist in the lived pain, before the solution
-    (e.g. lying awake at 2 AM, staring at a mirror, slumped in a chair)
-  • DISCOVERY MOMENT — the chance encounter or the screen at 1 AM
-    (e.g. reading a forgotten card, late-night phone in bed, conversation by a pool)
-  • PROOF OBJECT — a worn, used, transformed everyday object that PROVES the
-    story (NOT the product) — e.g. an old cookbook, a torn pillow, a CPAP
-    machine in a bin, an empty wineglass, a worn-out sock
-  • INTIMATE DOMESTIC SCENE — a candid moment in a home: a couple in bed,
-    a parent eating alone, hands on a kitchen counter, a closed bedroom door
-  • BODY DETAIL / VISCERAL PROOF — a close-up of a body part that carries
-    the problem: skin under harsh light, swollen ankles, hands trembling,
-    eye bags in a morning mirror
-  • MEDICAL / SEMI-CLINICAL IMAGERY — scan, X-ray, lab strip, annotated
-    diagram with "A" / "B" labels (these annotations ARE allowed)
-  • AUTHORITY FIGURE PORTRAIT — the unexpected expert from the story:
-    a retired pharmacist, a foreign doctor, an elderly artisan — captured
-    candidly, never posed
-
-The 7 reference ads in the KB consistently use 4 archetypes — use them
-as anchors, not constraints:
-  - Scène de vie intime (couple/parent in domestic moment)
-  - Visage authentique (close-up of unmade face, no makeup, harsh light)
-  - Objet-preuve usagé (worn artifact carrying the story)
-  - Imagerie médicale (scan, diagram with labels)
-
-You are FREE to invent a fifth archetype if it serves the story better,
-as long as the subject is NEVER the product.
-
-─── STEP 2 — SELF-VALIDATE BEFORE WRITING THE PROMPT ───────────────
-
-Once you've picked the moment, ask yourself:
-
-  Q1: "Is the subject of my image the product, its packaging, or anything
-       that looks like it would be sold in a store?"
-       → If YES → THROW AWAY and pick a different moment.
-
-  Q2: "Could this image stand alone on Reddit/Facebook with no caption
-       and look like a real person's post — not an ad?"
-       → If NO → rewrite.
-
-  Q3: "Does it trigger ONE of the 4 reflexes? (what is this / could be me /
-       yuck-wow / not an ad)"
-       → If NO → rewrite.
-
-─── STEP 3 — WRITE THE PROMPT ──────────────────────────────────────
-
-Only after passing Q1/Q2/Q3, write the Nanobanana prompt. Rules:
-
-- The FIRST noun after "1:1 square format," must be a HUMAN, a SCENE,
-  a BODY DETAIL, a PROOF OBJECT, or a MEDICAL VIEW. Never the product.
-- 5 systemic principles from SOP §6 must be activated by the prompt:
-  visual friction / radical authenticity / intimate intrusion /
-  visceral proof / focus displacement.
-- iPhone-authentic look: natural/ambient light, grain OK, imperfect
-  framing OK, no studio lighting, no professional model, no retouch,
-  no Instagram filter, no text on image, no logo, no brand name.
-- Format: ALWAYS 1:1 square. Never 4:5, never 16:9.
-
-GOOD prompt example (subject = body detail, focus displacement):
-  "1:1 square format, extreme close-up of a 56-year-old woman's lower
-  face in a bathroom mirror at 7 AM, harsh overhead light, vertical
-  lines around the lips visible, no makeup, slight grain, iPhone photo
-  feel, candid expression of mild frustration, no text, no logo, no
-  studio lighting, no professional model, no product visible."
-
-BAD prompt example (DO NOT WRITE THIS — product is the subject):
-  "1:1 square format, an elegant pillow on a bed, soft morning light,
-  product visible in the center..."  ← FAILS Q1.
-
-If you find yourself reaching for the product as the subject because
-"I have to show what we sell" — STOP. The whole point of the SOP is
-that NOT showing the product is what makes the ad feel native. The
-copy already sells the product. The image's only job is to stop the
-scroll with a non-ad-looking moment.
+Logique de matching copy↔image (§6): l'image illustre UN moment du
+récit ou UNE preuve mentionnée — jamais le produit lui-même de façon
+directe. Une image = une idée.
 
 ─────────────────────────────────────────────
 OUTPUT FORMAT
@@ -296,50 +225,23 @@ OUTPUT FORMAT
 
 # IMAGE BRIEF (pour Nanobanana)
 
-**Subject category** : [un seul choix parmi cette liste — pas de réécriture libre]
-- suffering_moment
-- discovery_moment
-- proof_object (ATTENTION: l'objet-preuve N'EST PAS le produit — c'est un
-  artefact secondaire qui matérialise l'histoire : vieux livre, oreiller
-  défoncé, machine CPAP au rebut, etc.)
-- intimate_domestic_scene
-- body_detail
-- medical_imagery
-- authority_portrait
-
 **Concept de l'image** :
-[Une ou deux phrases. Le moment précis du récit illustré (cite la phrase
-ou le bloc d'où il vient). Confirme explicitement: "Le produit n'apparaît
-PAS dans l'image."]
+[1-2 phrases — le moment du récit illustré, choisi en suivant la méthode
+du SOP §6.]
 
 **Prompt Nanobanana** :
 \`\`\`
-[Prompt complet en anglais, prêt à coller dans Nano-Banana 2.
-
-OBLIGATIONS:
-- Doit commencer par "1:1 square format,"
-- Le PREMIER nom après le format doit être un humain, une scène, un détail
-  corporel, un objet-preuve secondaire, ou une vue médicale — JAMAIS le
-  produit, son packaging, sa bouteille, son tube, son oreiller, son masque,
-  sa capsule, son flacon.
-- Doit inclure explicitement à la fin du prompt: "no text on image, no
-  logo, no studio lighting, no professional model, no Instagram filter,
-  no product visible, no packaging, no brand name."
-- Doit décrire: cadrage exact, lumière (naturelle/ambiante uniquement),
-  expression / posture, détails sensoriels, grain photo / look iPhone.
-- Le prompt doit être généré DYNAMIQUEMENT à partir du moment du récit
-  choisi — pas un template recopié.]
+[Prompt complet en anglais, prêt à coller dans Nano-Banana 2. Doit
+commencer par "1:1 square format,". Décrit le cadrage, la lumière
+naturelle, la scène, l'expression, le look photo iPhone authentique
+(grain, framing imparfait OK). Suit les règles photo absolues du
+SOP §6 (no packshot, no logo, no text, no studio, no pro model,
+no filtre).]
 \`\`\`
 
 **Pourquoi cette image fonctionne** :
-[2-3 lignes:
-1. Quel(s) principe(s) du SOP §6 sont activés (friction visuelle /
-   authenticité radicale / intrusion intime / preuve viscérale /
-   déplacement du focus).
-2. Quel(s) réflexe(s) parmi les 4 elle déclenche (c'est quoi ce truc /
-   ça pourrait être moi / beurk-wow / c'est pas une pub).
-3. Confirmation que le produit n'est pas dans l'image et pourquoi cette
-   absence renforce l'effet.]`;
+[2-3 lignes — quel(s) principe(s) du SOP §6 sont activés et quel(s)
+réflexe(s) parmi les 4 elle déclenche.]`;
 
   const anthropic = getAnthropic();
   const encoder = new TextEncoder();
