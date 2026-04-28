@@ -195,7 +195,7 @@ export default function IteratePage({ params }: { params: { id: string } }) {
                 <div className="card p-10 text-center">
                   <p className="text-text-muted text-3xl mb-3">▣</p>
                   <p className="text-text-primary text-sm font-medium">Pick a winner, paste a prompt, or upload a photo</p>
-                  <p className="text-text-muted text-xs mt-1">Then choose which axes to vary.</p>
+                  <p className="text-text-muted text-xs mt-1">Then let the AI pick the axes (Auto), or pick them yourself (Manual).</p>
                 </div>
               )}
             </>

@@ -44,6 +44,7 @@ export async function POST(req: Request) {
       strategies = [],
       otherInstructions = '',
       count,
+      mode = 'manual',
     }: {
       projectId: string;
       originalPrompt?: string;
@@ -53,6 +54,7 @@ export async function POST(req: Request) {
       strategies?: string[];
       otherInstructions?: string;
       count?: number;
+      mode?: 'auto' | 'manual';
     } = body;
 
     // Normalize all refs (new array shape + legacy single fields)
@@ -74,7 +76,7 @@ export async function POST(req: Request) {
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    if (strategies.length === 0 && !otherInstructions.trim()) {
+    if (mode === 'manual' && strategies.length === 0 && !otherInstructions.trim()) {
       return new Response(
         JSON.stringify({ error: 'Pick at least one strategy or write custom instructions' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } },
@@ -96,14 +98,22 @@ export async function POST(req: Request) {
     const knowledgeContext = buildGlobalKnowledgeBlock(globalKnowledge, 'static');
     const n = Math.max(1, Math.min(20, count || 3));
 
-    const strategyBlock = strategies
-      .map((s) => STRATEGY_INSTRUCTIONS[s])
-      .filter(Boolean)
-      .map((line, i) => `${i + 1}. ${line}`)
-      .join('\n');
+    const strategyBlock = mode === 'auto'
+      ? `AUTO MODE — you decide which axes to vary. Process:
+
+1. ANALYZE the winning creative (prompt + reference image${refs.length === 1 ? '' : 's'} + brand context above) carefully.
+2. DIAGNOSE silently why it likely worked — what specific elements carry the conversion: hook framing, visual structure, proof type, emotional angle, demographic specificity, format choice, etc. The user did NOT tell you what worked. Figure it out from the brand DNA, the market, the saint graal, and what's visible in the creative.
+3. PICK the axes that, given this brand's positioning and market, are highest-EV to test next. Common axes: hook variation, format swap, angle pivot, social-proof swap, pain/promise intensification, demographic pivot, CTA variation. You may also invent a new axis if the diagnosis suggests something more specific.
+4. PRODUCE ${n} iteration${n === 1 ? '' : 's'}. When ${n} > 1, spread across DIFFERENT axes (don't make 5 hook variations unless your diagnosis truly says hook is the only lever). Each iteration must keep the winning DNA visible.
+5. For each iteration, name the axis you picked AND give one sentence explaining why this test should outperform alternatives.`
+      : strategies
+          .map((s) => STRATEGY_INSTRUCTIONS[s])
+          .filter(Boolean)
+          .map((line, i) => `${i + 1}. ${line}`)
+          .join('\n');
 
     const otherBlock = otherInstructions.trim()
-      ? `\nADDITIONAL CUSTOM ITERATION INSTRUCTIONS FROM USER (apply these as the most important constraint):\n${otherInstructions.trim()}`
+      ? `\nADDITIONAL CUSTOM ITERATION INSTRUCTIONS FROM USER (apply these as the most important constraint${mode === 'auto' ? ' — let them steer your axis choice' : ''}):\n${otherInstructions.trim()}`
       : '';
 
     const refImageDescriptor = refs.length === 1 ? 'a reference image' : `${refs.length} reference images`;
@@ -147,7 +157,7 @@ ${STATIC_VISUAL_DIRECTION_RULE}`;
     const variableSuffix = `${sourceBlock}
 
 ─────────────────────────────────────────────
-ITERATION STRATEGIES TO APPLY
+${mode === 'auto' ? 'ITERATION INSTRUCTIONS — AUTO' : 'ITERATION STRATEGIES TO APPLY'}
 ─────────────────────────────────────────────
 ${strategyBlock || '(none — use only the custom instructions below)'}
 ${otherBlock}
@@ -155,9 +165,9 @@ ${otherBlock}
 ─────────────────────────────────────────────
 CORE RULES
 ─────────────────────────────────────────────
-- Each iteration must keep what already works (the "winning DNA"). Only vary along the requested axes.
+- Each iteration must keep what already works (the "winning DNA"). Only vary along the chosen axes.
 - Iterations should feel like SIBLINGS of the original, not unrelated new ads.
-- Each iteration must clearly differ from the others on the chosen axis.
+- Each iteration must clearly differ from the others on its chosen axis.
 - ${n} iterations total.
 
 ─────────────────────────────────────────────
@@ -168,6 +178,7 @@ ${Array.from({ length: n }, (_, i) => `
 ## ITERATION ${i + 1}
 
 **Iterates on:** [name the axis(es) varied — e.g. "Hook variation: urgency angle" / "Format swap: now a comparison grid"]
+${mode === 'auto' ? '\n**Why this axis:** [one sentence — what you diagnosed about the original and why this axis is the highest-EV test next]\n' : ''}
 
 \`\`\`
 [Subject / Action]
@@ -231,6 +242,7 @@ ${Array.from({ length: n }, (_, i) => `
                 strategies,
                 otherInstructions,
                 count: n,
+                mode,
               }),
               output: fullText,
             },

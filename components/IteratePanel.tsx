@@ -38,6 +38,7 @@ interface IterationRun {
   id: string;
   count: number;
   strategiesUsed: string[];
+  mode: 'auto' | 'manual';
   streamedText: string;
   loading: boolean;
   error: string;
@@ -81,6 +82,7 @@ export default function IteratePanel({
   // reproduce it faithfully.
   const [productRefImages, setProductRefImages] = useState<RefImage[]>([]);
 
+  const [mode, setMode] = useState<'auto' | 'manual'>('auto');
   const [strategies, setStrategies] = useState<Set<string>>(new Set());
   const [otherInstructions, setOtherInstructions] = useState('');
   const [count, setCount] = useState('3');
@@ -165,7 +167,7 @@ export default function IteratePanel({
 
   const handleGenerate = async () => {
     setValidationError('');
-    if (strategies.size === 0 && !otherInstructions.trim()) {
+    if (mode === 'manual' && strategies.size === 0 && !otherInstructions.trim()) {
       setValidationError('Pick at least one strategy or write custom instructions.');
       return;
     }
@@ -178,7 +180,8 @@ export default function IteratePanel({
     const newRun: IterationRun = {
       id: runId,
       count: n,
-      strategiesUsed: Array.from(strategies),
+      strategiesUsed: mode === 'auto' ? ['auto'] : Array.from(strategies),
+      mode,
       streamedText: '',
       loading: true,
       error: '',
@@ -198,9 +201,10 @@ export default function IteratePanel({
           referenceImages: hasRefs
             ? refs.map((r) => ({ base64: r.base64, mimeType: r.mimeType }))
             : undefined,
-          strategies: Array.from(strategies),
+          strategies: mode === 'manual' ? Array.from(strategies) : [],
           otherInstructions,
           count: n,
+          mode,
         }),
       });
 
@@ -283,41 +287,78 @@ export default function IteratePanel({
         </div>
       </div>
 
-      {/* Strategy pills */}
+      {/* Mode toggle */}
       <div>
         <label className="text-text-muted text-[10px] uppercase tracking-widest block mb-2">
-          Iteration strategies <span className="text-text-muted normal-case">(pick one or more)</span>
+          Mode
         </label>
-        <div className="flex flex-wrap gap-1.5">
-          {ITERATION_STRATEGIES.map((s) => {
-            const active = strategies.has(s.value);
-            return (
-              <button
-                key={s.value}
-                onClick={() => toggleStrategy(s.value)}
-                title={s.desc}
-                className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${
-                  active
-                    ? 'bg-accent-gold/20 border-accent-gold/60 text-accent-gold'
-                    : 'border-bg-border text-text-secondary hover:border-text-muted'
-                }`}
-              >
-                {s.label}
-              </button>
-            );
-          })}
+        <div className="flex gap-1.5">
+          <button
+            onClick={() => setMode('auto')}
+            className={`flex-1 text-xs px-3 py-2 rounded-md border transition-colors text-left ${
+              mode === 'auto'
+                ? 'bg-accent-gold/20 border-accent-gold/60 text-accent-gold'
+                : 'border-bg-border text-text-secondary hover:border-text-muted'
+            }`}
+          >
+            <span className="block font-semibold">✨ Auto</span>
+            <span className="block text-[10px] mt-0.5 opacity-80 normal-case">AI diagnoses why it worked + picks the best axes to test</span>
+          </button>
+          <button
+            onClick={() => setMode('manual')}
+            className={`flex-1 text-xs px-3 py-2 rounded-md border transition-colors text-left ${
+              mode === 'manual'
+                ? 'bg-accent-gold/20 border-accent-gold/60 text-accent-gold'
+                : 'border-bg-border text-text-secondary hover:border-text-muted'
+            }`}
+          >
+            <span className="block font-semibold">⚙️ Manual</span>
+            <span className="block text-[10px] mt-0.5 opacity-80 normal-case">You pick which axes to vary</span>
+          </button>
         </div>
       </div>
 
-      {/* Other / custom instructions */}
+      {/* Strategy pills — manual mode only */}
+      {mode === 'manual' && (
+        <div>
+          <label className="text-text-muted text-[10px] uppercase tracking-widest block mb-2">
+            Iteration strategies <span className="text-text-muted normal-case">(pick one or more)</span>
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {ITERATION_STRATEGIES.map((s) => {
+              const active = strategies.has(s.value);
+              return (
+                <button
+                  key={s.value}
+                  onClick={() => toggleStrategy(s.value)}
+                  title={s.desc}
+                  className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${
+                    active
+                      ? 'bg-accent-gold/20 border-accent-gold/60 text-accent-gold'
+                      : 'border-bg-border text-text-secondary hover:border-text-muted'
+                  }`}
+                >
+                  {s.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Custom instructions — always shown, optional in both modes */}
       <div>
         <label className="text-text-muted text-[10px] uppercase tracking-widest block mb-1">
-          Other / custom instructions <span className="text-text-muted normal-case">(optional)</span>
+          {mode === 'auto' ? 'Optional steering' : 'Other / custom instructions'} <span className="text-text-muted normal-case">(optional)</span>
         </label>
         <textarea
           className="input-field resize-none text-xs"
           rows={3}
-          placeholder='e.g. "what worked is the bold headline — push the urgency further" / "test versions targeting menopausal women"'
+          placeholder={
+            mode === 'auto'
+              ? 'e.g. "lean toward hook variations" / "we want to test the menopause sub-segment" — leave empty to give the AI full freedom'
+              : 'e.g. "what worked is the bold headline — push the urgency further" / "test versions targeting menopausal women"'
+          }
           value={otherInstructions}
           onChange={(e) => setOtherInstructions(e.target.value)}
         />
@@ -391,11 +432,13 @@ export default function IteratePanel({
             <p className="text-text-secondary text-xs uppercase tracking-widest">
               Iterations · run {runs.length - idx}
               {run.loading && <span className="ml-2 text-accent-gold animate-pulse">● streaming…</span>}
-              {run.strategiesUsed.length > 0 && (
+              {run.mode === 'auto' ? (
+                <span className="ml-2 text-text-muted normal-case">(✨ auto — AI-picked axes)</span>
+              ) : run.strategiesUsed.length > 0 ? (
                 <span className="ml-2 text-text-muted normal-case">
                   ({run.strategiesUsed.join(', ')})
                 </span>
-              )}
+              ) : null}
             </p>
             <div className="flex items-center gap-2">
               {run.streamedText && !run.loading && (
