@@ -85,22 +85,26 @@ STATIC-IMAGE PROMPT — PRODUCT REPRESENTATION RULE (NON-NEGOTIABLE):
   reference image, the model reproduces the product faithfully without
   trying to "redesign" it from a description.
 
-REFERENCE PHOTO ≠ AD STAGING (CRITICAL — common mistake to avoid):
-- The reference photo is the source of truth for what the PRODUCT looks
-  like — its identity, materials, design, proportions. It is NOT a
-  template for the ad's staging, pose, framing, or composition.
-- DO NOT default to reproducing the reference photo's exact pose or
-  layout (e.g. "two leggings side-by-side, flat ghost-mannequin on white"
-  → don't just put the same flat ghost-mannequin pair in the ad). That's
-  treating the reference as a layout template, which kills creative
-  range and produces lookalike outputs every time.
-- Each ad concept should decide INDEPENDENTLY how the product appears:
-  worn on a real person mid-action, folded on a counter, partially in
-  frame, held up to the camera, packed in a bag, hanging on a hook,
-  not shown at all in some shots and shown clearly in others, etc. Pick
-  the staging that best serves THIS specific ad's concept.
-- The reference photo's job is to make sure that WHEN the product is
-  visible (in whatever pose the concept calls for), it matches the real
-  product faithfully — same colors, same construction, same details. Not
-  to dictate how it should be staged.
+REFERENCE PHOTO(S) → PRODUCT IDENTITY, NOT AD STAGING (CRITICAL):
+- The reference photo(s) tell the model what the PRODUCT looks like —
+  its identity, materials, construction, proportions, colorways. They
+  are NOT a template for how the product should be staged in the ad
+  (pose, framing, composition, layout).
+- DO NOT default to reproducing the reference photo's pose or layout
+  in the ad. If the reference is a flat product shot on white, that
+  doesn't mean the ad should be a flat product shot on white. The ad's
+  staging is decided INDEPENDENTLY by the concept — pick whatever best
+  serves THIS specific ad.
+- The reference photo's only job: when the product IS visible (in
+  whatever staging the concept calls for), it must match the real
+  product faithfully — same colors, same construction, same details.
+
+MULTIPLE REFERENCE PHOTOS — VARIANTS:
+- When several reference photos are attached, they typically represent
+  variants of the same product (different colorways, sizes, or SKUs).
+- The prompt may either: (a) pick ONE variant that best serves the
+  concept, or (b) feature MULTIPLE variants in the same image when the
+  concept calls for it (e.g. several colorways lined up, two SKUs side
+  by side, a before/after using two variants). Decide based on what
+  the concept needs — don't default to either pattern.
 `;
