@@ -4,13 +4,13 @@ import { useEffect, useState } from 'react';
 import MultiImageInput, { RefImage } from './MultiImageInput';
 import { addWinner, removeWinner } from '@/lib/winners';
 
+// Phase 1 — kie.ai. Only the 3 nano-banana variants we actually use in
+// production. More models (flux, midjourney, recraft, etc.) will be added
+// in Phase 2 once kie integration is validated.
 export const IMAGE_MODELS = [
+  { value: 'nano-banana-2', label: 'Nano Banana 2 (default — fast, uses ref image if provided)', needsRef: false, allowsRef: true },
   { value: 'nano-banana-pro', label: 'Nano Banana Pro (best — uses ref image if provided)', needsRef: false, allowsRef: true },
-  { value: 'nano-banana-2', label: 'Nano Banana 2 (fast, uses ref image if provided)', needsRef: false, allowsRef: true },
   { value: 'nano-banana', label: 'Nano Banana (original, uses ref image if provided)', needsRef: false, allowsRef: true },
-  { value: 'flux-pro-ultra', label: 'Flux Pro Ultra (highest realism, no ref)', needsRef: false, allowsRef: false },
-  { value: 'recraft-v3', label: 'Recraft v3 (best for ads with text)', needsRef: false, allowsRef: false },
-  { value: 'imagen4', label: 'Imagen 4 (Google, photoreal)', needsRef: false, allowsRef: false },
 ];
 
 interface Props {
@@ -57,7 +57,7 @@ export default function PromptImageGenerator({
       ? [initialImage]
       : [];
 
-  const [model, setModel] = useState(initialModel || 'nano-banana');
+  const [model, setModel] = useState(initialModel || 'nano-banana-2');
   const [refs, setRefs] = useState<RefImage[]>(seedRefs);
   const [feedback, setFeedback] = useState('');
   const [loading, setLoading] = useState(false);

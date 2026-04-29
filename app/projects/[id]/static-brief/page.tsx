@@ -662,7 +662,7 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
               <p className="text-text-muted text-sm max-w-md mx-auto leading-relaxed">
                 {mode === 'clone'
                   ? 'Upload a competitor ad — the AI will audit its visual structure, psychological angle, and generate Nanobanana prompts adapted to your brand. You can also generate the final image directly.'
-                  : 'Enter a product and optionally a marketing angle. The AI generates prompts with completely different formats — and can directly produce the images via Fal.ai.'}
+                  : 'Enter a product and optionally a marketing angle. The AI generates prompts with completely different formats — and can directly produce the images via kie.ai.'}
               </p>
             </div>
           )}

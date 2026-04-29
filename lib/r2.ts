@@ -1,7 +1,8 @@
 // Cloudflare R2 upload helper. R2 is S3-compatible, so we use the AWS SDK
-// pointed at the R2 endpoint. Used to mirror Fal.ai-generated images so we
-// own a permanent copy (Fal URLs aren't guaranteed forever, and we want to
-// show generated images in the History page).
+// pointed at the R2 endpoint. Two roles since the kie.ai swap:
+//   1. Mirror generated images (kie URLs expire in ~24h).
+//   2. Upload reference images so we have public URLs to pass to kie
+//      (kie does not accept base64 data URIs).
 
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { randomUUID } from 'node:crypto';
@@ -70,7 +71,24 @@ export async function uploadBufferToR2(
 }
 
 /**
- * Downloads an image from a remote URL (e.g. Fal.ai) and mirrors it to R2.
+ * Uploads a base64-encoded image to R2 and returns the public URL.
+ * Used to convert in-memory reference images into public URLs that
+ * external APIs (e.g. kie.ai) can fetch — they don't accept data URIs.
+ *
+ * Strips the "data:image/...;base64," prefix if present.
+ */
+export async function uploadBase64ToR2(
+  base64: string,
+  mimeType: string = 'image/jpeg',
+  prefix = 'refs',
+): Promise<string> {
+  const cleaned = base64.replace(/^data:[^;]+;base64,/, '');
+  const buffer = Buffer.from(cleaned, 'base64');
+  return await uploadBufferToR2(buffer, mimeType, prefix);
+}
+
+/**
+ * Downloads an image from a remote URL (e.g. kie.ai) and mirrors it to R2.
  * Returns the new R2 URL. Falls back to the source URL if R2 is not
  * configured (so the app keeps working in dev without R2 envs set).
  */

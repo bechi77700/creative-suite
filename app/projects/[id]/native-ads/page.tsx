@@ -6,7 +6,7 @@
 //   1. Product textarea (required) + optional context
 //   2. Generate → SSE stream from /api/generate/native-ad
 //   3. Stream is split into two cards: the ad copy and the image brief
-//   4. Once stream ends, the Nanobanana prompt fires fal.ai (nano-banana-2)
+//   4. Once stream ends, the Nanobanana prompt fires kie.ai (nano-banana-2)
 //   5. Iterate panel below the image lets the user refine via feedback
 
 import { useEffect, useMemo, useState } from 'react';

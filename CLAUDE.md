@@ -4,10 +4,10 @@ This file is the contract between Claude and the codebase. Read it first, every 
 
 ## What this is
 
-Creative Suite is a **Next.js 14 SaaS** for generating Meta Ads creative briefs (statics, video scripts, hooks, native ads) with Claude + fal.ai. Brand-scoped — each `BrandProject` owns its docs, generations, and winners.
+Creative Suite is a **Next.js 14 SaaS** for generating Meta Ads creative briefs (statics, video scripts, hooks, native ads) with Claude + kie.ai. Brand-scoped — each `BrandProject` owns its docs, generations, and winners.
 
 - **Stack** — Next 14.2.35 App Router · React 18 · TypeScript · Tailwind · Prisma + Postgres
-- **AI** — `@anthropic-ai/sdk` (Claude) for text · `@fal-ai/client` for images · `@google/generative-ai` for video analysis
+- **AI** — `@anthropic-ai/sdk` (Claude) for text · `lib/kie.ts` (kie.ai REST) for images · `@google/generative-ai` for video analysis
 - **Storage** — Cloudflare R2 mirror via `@aws-sdk/client-s3` for image persistence
 - **Deploy** — Railway, Node 18. **Push to `main` = auto-deploy.** No CI gates.
 - **Dev port** — 3001 (`npm run dev`)
@@ -27,7 +27,7 @@ app/
       clone-and-adapt-video/   take a video, write a new script in the brand voice
       variations/          5 variants of a hook/static
       native-ad/           long-form editorial native ads (SSE)
-      image/               fal.ai bridge — nano-banana-2/pro, flux, recraft, imagen4
+      image/               kie.ai bridge — nano-banana, nano-banana-2, nano-banana-pro
     projects/[id]/         CRUD on BrandProject + nested docs
     knowledge/             CRUD on GlobalKnowledge
     winners/               per-asset winners library
@@ -108,13 +108,13 @@ Events: `text` ({text}), `done` ({generationId?}), `error` ({error}). Set `maxDu
 Client side: use `parseSSE(res.body)` from `lib/streaming.ts`.
 
 ### Image generation — `/api/generate/image`
-Single bridge to fal.ai. Accepts:
+Single bridge to kie.ai. Accepts:
 - `prompt` (required), `model` (default `nano-banana`)
 - `referenceImages: [{ base64, mimeType }]` for clone-and-adapt (nano-banana models accept multiple via `image_urls[]`)
 - `feedback` — appended to the prompt as "USER FEEDBACK ON PREVIOUS GENERATION" (used by iterate buttons)
 - `projectId` — when set, persists a `Generation` row (`module: 'static-image'`)
 
-Mirrors the fal-hosted URL to R2 (when configured) and returns the persisted URL. Falls back to the fal URL silently if R2 is missing. `module === 'static-image'` rows surface in the History page.
+Mirrors the kie-hosted URL to R2 and returns the persisted URL. **R2 is now MANDATORY** (kie requires public URLs for reference images, and kie result URLs expire in ~24h). The route returns 500 if R2 isn't configured. `module === 'static-image'` rows surface in the History page.
 
 For native ads: model is `nano-banana-2`, prompt must start with `1:1 square format,` (no other aspect ratio allowed).
 
@@ -167,16 +167,16 @@ Markdown outputs use `react-markdown` with `prose prose-invert`. The full prose 
 
 - Free tier: 10GB storage, 1M Class A ops/mo, 10M Class B ops/mo. Currently <1% usage.
 - `lib/r2.ts` exports `mirrorRemoteImageToR2(url, prefix)` and `isR2Configured()`.
-- Image route mirrors silently: if R2 is missing, returns the fal URL as-is.
+- R2 is mandatory for the image route (kie.ai needs public ref-image URLs + result mirroring).
 - Env vars (Railway): `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL`.
 
 ## Env vars
 
 - `POSTGRES_URL` — Railway-provided
 - `ANTHROPIC_API_KEY` — paid API, **NOT the Claude Max subscription** (subscriptions don't authenticate API calls)
-- `FAL_KEY` — fal.ai
+- `KIE_API_KEY` — kie.ai (image generation)
 - `GEMINI_API_KEY` — Google AI Studio (video analysis)
-- `R2_*` — Cloudflare R2 mirror (optional, falls back to fal URLs)
+- `R2_*` — Cloudflare R2 mirror (MANDATORY since kie.ai swap)
 
 ## Things to NOT do
 
