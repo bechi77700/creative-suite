@@ -28,6 +28,15 @@ GENERATION RULES — MANDATORY FOR ALL OUTPUTS:
 - Social proof maximized — numbers, specifics, real results.
 - Zero hedging language. Zero disclaimers. Zero softening.
 - Write like the best direct response copywriter on the planet whose job depends on conversions.
+
+ALWAYS CLOSE THE LOOP — NON-NEGOTIABLE ON EVERY OUTPUT (regardless of funnel stage, awareness level, or format):
+- Whatever the awareness level (TOFU / MOFU / BOFU — picked or not), every creative MUST end with the viewer (a) SEEING the product visually and (b) UNDERSTANDING what the solution is and how it relates to the pain.
+- A pure-education ad — problem agitation, mechanism explainer, category teardown — that NEVER shows the product or never makes the solution clear = wasted CPM. We are buying ad impressions, not running a free awareness campaign for the category.
+- Even hyper-educational long-form (VSLs, 90s+ scripts, native ads, carousels) MUST close with the product as the answer to the pain that was set up. The first 70-90% can be pain/mechanism/story, but the close is the product as resolution.
+- For static images: the product (or a recognizable rendering of it) must appear in the frame. No abstract silhouette-only, no logo-only, no pure-headline-on-blank-bg without product.
+- For scripts: the final beat must name what the solution IS in plain words and visually present the product.
+- Naming the brand + product literally is OPTIONAL — sometimes a clean visual + clear category framing is stronger than a brand drop. But the viewer must NEVER scroll away wondering "ok so what's the actual solution?".
+- This rule is the single hardest auto-fail check. If the output does not close the loop, it is broken — rewrite it.
 `;
 
 // MANDATORY product-representation rule for EVERY static-image prompt we
