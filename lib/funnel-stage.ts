@@ -45,8 +45,12 @@ export function buildFunnelStageInstruction(stage: FunnelStage | null | undefine
 - MESSAGE INTENT: Pattern interrupt + amplify a felt pain or callout the audience by identity. Make them feel "this is about me" in the first 1-2 seconds.
 - HOOK PRIORITY: Curiosity, identity callout, brutal pain naming, contrarian statement, surprising stat, "stop scrolling if…".
 - DO: lead with the problem, the enemy, the symptom, the daily frustration. The first 70-80% of the creative is pure attention play — earn the click.
-- ALWAYS CLOSE THE LOOP (non-negotiable on Meta cold): even when leading with pain or mechanism, the creative MUST surface the product/brand as the answer somewhere — minimum: brand logo + one-line resolution at the bottom of a static, or a final beat naming the product as the solution in a video/script. A pure-education ad with no product mention is paying CPM to educate strangers for free. Even hyper-educational VSLs end with "and that's exactly why we built [product]". Apply the same logic here: explain the problem, then close with the product as the answer.
-- DO NOT: name the product in the FIRST beat, lead with the offer, list features at the top, use hard "Buy Now" CTAs, leave the creative without ANY product/brand resolution.
+- ALWAYS CLOSE THE LOOP — UNAMBIGUOUSLY (non-negotiable on Meta cold): even when leading with pain or mechanism, the user must finish the creative KNOWING what the solution is — not guessing. The product must be:
+   (a) NAMED explicitly (brand name + product name written out, not just a logo glyph),
+   (b) SHOWN visually (real product image or recognizable rendering — no abstract silhouette), and
+   (c) CONNECTED to the pain in plain words ("X is the apron that fixes this" / "Y is what gardeners over 60 are switching to" / "Z is the post-40 lymph protocol").
+   A pure-education ad where the viewer scrolls away wondering "ok so what's the solution?" is wasted CPM. Even hyper-educational VSLs end with a clear "and that's exactly why we built [product] — here's how it works". Apply the same logic here: explain the problem, then explicitly name and show the product as the answer.
+- DO NOT: name the product in the FIRST beat, lead with the offer, list features at the top, use hard "Buy Now" CTAs, leave the creative without ANY product/brand resolution, hide the solution behind a vague tagline, or rely on a logo alone (the viewer doesn't recognize the brand yet — a logo with no product name is invisible).
 - PROOF DENSITY: Low — a single shocking stat or visceral example beats a wall of social proof here.
 - CTA: Soft but PRESENT. "See how [product] fixes this" / "Why [audience] are switching to [product]" / "Meet [product]". Never zero CTA. We're buying attention AND planting the resolution in the same impression.`,
 
