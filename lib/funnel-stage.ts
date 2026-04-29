@@ -45,12 +45,11 @@ export function buildFunnelStageInstruction(stage: FunnelStage | null | undefine
 - MESSAGE INTENT: Pattern interrupt + amplify a felt pain or callout the audience by identity. Make them feel "this is about me" in the first 1-2 seconds.
 - HOOK PRIORITY: Curiosity, identity callout, brutal pain naming, contrarian statement, surprising stat, "stop scrolling if…".
 - DO: lead with the problem, the enemy, the symptom, the daily frustration. The first 70-80% of the creative is pure attention play — earn the click.
-- ALWAYS CLOSE THE LOOP — UNAMBIGUOUSLY (non-negotiable on Meta cold): even when leading with pain or mechanism, the user must finish the creative KNOWING what the solution is — not guessing. The product must be:
-   (a) NAMED explicitly (brand name + product name written out, not just a logo glyph),
-   (b) SHOWN visually (real product image or recognizable rendering — no abstract silhouette), and
-   (c) CONNECTED to the pain in plain words ("X is the apron that fixes this" / "Y is what gardeners over 60 are switching to" / "Z is the post-40 lymph protocol").
-   A pure-education ad where the viewer scrolls away wondering "ok so what's the solution?" is wasted CPM. Even hyper-educational VSLs end with a clear "and that's exactly why we built [product] — here's how it works". Apply the same logic here: explain the problem, then explicitly name and show the product as the answer.
-- DO NOT: name the product in the FIRST beat, lead with the offer, list features at the top, use hard "Buy Now" CTAs, leave the creative without ANY product/brand resolution, hide the solution behind a vague tagline, or rely on a logo alone (the viewer doesn't recognize the brand yet — a logo with no product name is invisible).
+- ALWAYS CLOSE THE LOOP — UNAMBIGUOUSLY (non-negotiable on Meta cold): even when leading with pain or mechanism, the viewer must finish the creative KNOWING what the solution is — not guessing. Two requirements are NON-NEGOTIABLE:
+   (1) The product is SHOWN visually (real product image or recognizable rendering — no abstract silhouette, no logo-only).
+   (2) The viewer UNDERSTANDS what the solution is and how it relates to the pain — in plain words, not behind a vague tagline. Examples: "the apron that empties in 1 second" / "the post-40 lymph protocol" / "what gardeners over 60 are switching to".
+   Naming the brand + product explicitly is OPTIONAL — sometimes a clean visual + clear category framing is stronger than a brand drop. But the viewer must never scroll away wondering "ok so what's the actual solution?". A pure-education ad with no product visible = wasted CPM. Even hyper-educational VSLs always close with the product as the answer.
+- DO NOT: name the product in the FIRST beat, lead with the offer, list features at the top, use hard "Buy Now" CTAs, leave the creative without ANY visible product, or hide the solution behind a vague tagline.
 - PROOF DENSITY: Low — a single shocking stat or visceral example beats a wall of social proof here.
 - CTA: Soft but PRESENT. "See how [product] fixes this" / "Why [audience] are switching to [product]" / "Meet [product]". Never zero CTA. We're buying attention AND planting the resolution in the same impression.`,
 
@@ -59,8 +58,8 @@ export function buildFunnelStageInstruction(stage: FunnelStage | null | undefine
 - AWARENESS LEVEL (Schwartz): Solution-Aware.
 - MESSAGE INTENT: Differentiate the MECHANISM. Why THIS approach beats the obvious alternatives they're already considering. Earn the trust to be shortlisted.
 - HOOK PRIORITY: Mechanism reveal, "the real reason X doesn't work", category callout vs the brand's wedge, founder story / origin, demo of the unique method.
-- DO: name the category enemy (the typical solution that fails), explain the unique mechanism in plain words, show the "aha" moment, contrast with what they've already tried. The product MUST be named and visibly shown — this stage is about YOUR mechanism, not the category's.
-- ALWAYS CLOSE THE LOOP: the brand and product must be impossible to miss. Mechanism explainers without a clear "and that's why [product] does X differently" close are wasted impressions on warm traffic — they had the option to recall a competitor instead.
+- DO: name the category enemy (the typical solution that fails), explain the unique mechanism in plain words, show the "aha" moment, contrast with what they've already tried. The product MUST be visibly shown and the viewer MUST understand it's YOUR mechanism being explained (not the category's generic solution). Naming the brand + product is encouraged at this stage but technically optional if the visual + framing make it unambiguous.
+- ALWAYS CLOSE THE LOOP: the product must be impossible to miss visually, and the viewer must finish thinking "ah, that's the [thing] that does X differently". Mechanism explainers where the product is barely visible = wasted impressions on warm traffic — they had the option to recall a competitor instead.
 - DO NOT: re-explain the problem from scratch (they know it), lead with discounts, treat the viewer as a beginner, run pure category education with the brand barely visible.
 - PROOF DENSITY: Medium — one or two concrete proof points (study, before/after, expert) reinforcing the mechanism.
 - CTA: Medium. "See how [product] does it" / "Try the method" / "Read the science behind [product]". We're earning consideration, not closing yet — but the brand and product must be impossible to miss.`,
