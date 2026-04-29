@@ -44,20 +44,22 @@ export function buildFunnelStageInstruction(stage: FunnelStage | null | undefine
 - AWARENESS LEVEL (Schwartz): Unaware → Problem-Aware.
 - MESSAGE INTENT: Pattern interrupt + amplify a felt pain or callout the audience by identity. Make them feel "this is about me" in the first 1-2 seconds.
 - HOOK PRIORITY: Curiosity, identity callout, brutal pain naming, contrarian statement, surprising stat, "stop scrolling if…".
-- DO: lead with the problem, the enemy, the symptom, the daily frustration. Pure attention play. Earn the click.
-- DO NOT: name the product in the first beat, push the offer, list features, drop "Buy Now" CTAs, assume they care about your brand.
+- DO: lead with the problem, the enemy, the symptom, the daily frustration. The first 70-80% of the creative is pure attention play — earn the click.
+- ALWAYS CLOSE THE LOOP (non-negotiable on Meta cold): even when leading with pain or mechanism, the creative MUST surface the product/brand as the answer somewhere — minimum: brand logo + one-line resolution at the bottom of a static, or a final beat naming the product as the solution in a video/script. A pure-education ad with no product mention is paying CPM to educate strangers for free. Even hyper-educational VSLs end with "and that's exactly why we built [product]". Apply the same logic here: explain the problem, then close with the product as the answer.
+- DO NOT: name the product in the FIRST beat, lead with the offer, list features at the top, use hard "Buy Now" CTAs, leave the creative without ANY product/brand resolution.
 - PROOF DENSITY: Low — a single shocking stat or visceral example beats a wall of social proof here.
-- CTA: Soft. "Learn more" / "See why" / "Watch this" / no CTA at all. We're buying attention, not conversion.`,
+- CTA: Soft but PRESENT. "See how [product] fixes this" / "Why [audience] are switching to [product]" / "Meet [product]". Never zero CTA. We're buying attention AND planting the resolution in the same impression.`,
 
     MOFU: `FUNNEL STAGE: MOFU (warm traffic — solution-aware)
 - AUDIENCE STATE: Knows they have the problem and is comparing solutions / mechanisms. Has seen ads in the category before.
 - AWARENESS LEVEL (Schwartz): Solution-Aware.
 - MESSAGE INTENT: Differentiate the MECHANISM. Why THIS approach beats the obvious alternatives they're already considering. Earn the trust to be shortlisted.
 - HOOK PRIORITY: Mechanism reveal, "the real reason X doesn't work", category callout vs the brand's wedge, founder story / origin, demo of the unique method.
-- DO: name the category enemy (the typical solution that fails), explain the unique mechanism in plain words, show the "aha" moment, contrast with what they've already tried.
-- DO NOT: re-explain the problem from scratch (they know it), lead with discounts, treat the viewer as a beginner.
+- DO: name the category enemy (the typical solution that fails), explain the unique mechanism in plain words, show the "aha" moment, contrast with what they've already tried. The product MUST be named and visibly shown — this stage is about YOUR mechanism, not the category's.
+- ALWAYS CLOSE THE LOOP: the brand and product must be impossible to miss. Mechanism explainers without a clear "and that's why [product] does X differently" close are wasted impressions on warm traffic — they had the option to recall a competitor instead.
+- DO NOT: re-explain the problem from scratch (they know it), lead with discounts, treat the viewer as a beginner, run pure category education with the brand barely visible.
 - PROOF DENSITY: Medium — one or two concrete proof points (study, before/after, expert) reinforcing the mechanism.
-- CTA: Medium. "See how it works" / "Try the method" / "Read the science". We're earning consideration, not closing yet.`,
+- CTA: Medium. "See how [product] does it" / "Try the method" / "Read the science behind [product]". We're earning consideration, not closing yet — but the brand and product must be impossible to miss.`,
 
     BOFU: `FUNNEL STAGE: BOFU (hot traffic — product-aware / most-aware)
 - AUDIENCE STATE: Knows the brand and the product. Already considering buying. Needs the final push — proof, offer, scarcity, risk-reversal.
