@@ -73,6 +73,23 @@ STATIC AD — VISUAL DIRECTION RULE (MIX BRAND-FAITHFUL AND BRAND-BREAKING):
 `;
 
 export const STATIC_PRODUCT_RULE = `
+STATIC-IMAGE PROMPT — FORMAT RULE (NON-NEGOTIABLE — Meta-only formats):
+- Every image prompt MUST start by declaring ONE of these THREE Meta-spec
+  formats — and NOTHING else is allowed:
+    · "4:5 vertical format (1080x1350), Meta Feed,"
+    · "9:16 vertical format (1080x1920), Meta Reels + Stories,"
+    · "1:1 square format (1080x1080), Meta Carousel + Marketplace,"
+- Pick the format based on the concept: storytelling / talking-head /
+  full-body scenes → 9:16. Editorial / lifestyle / product hero →
+  4:5 (the Meta Feed default and best CPM). Carousel slides, marketplace
+  thumbnails, multi-product compositions, fallback when unsure → 1:1.
+- FORBIDDEN: 16:9, 3:4, 2:3, 4:3, 21:9, square non-1080, any other
+  aspect ratio. If you write any of these the prompt is auto-failed —
+  Meta won't run the ad properly and the placement will be cropped or
+  rejected.
+- The format declaration is the very first thing in the prompt, before
+  any visual description.
+
 STATIC-IMAGE PROMPT — PRODUCT REPRESENTATION RULE (NON-NEGOTIABLE):
 - NEVER describe the product itself in the prompt. No material, no color of
   the product, no shape, no parts ("cross-back straps", "olive canvas",

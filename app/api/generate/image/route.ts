@@ -99,6 +99,14 @@ export async function POST(req: Request) {
       ? `${prompt}\n\nUSER FEEDBACK ON PREVIOUS GENERATION (apply these corrections):\n${feedback}`
       : prompt;
 
+    // Detect Meta-spec aspect ratio from the prompt and pass it to kie
+    // explicitly. Otherwise kie defaults to "auto" and the model can output
+    // off-spec ratios (16:9 etc.) even when the prompt says "4:5". The
+    // STATIC_PRODUCT_RULE forces Claude to declare 4:5, 9:16, or 1:1 at
+    // the start — we scan for it here.
+    const aspectMatch = finalPrompt.match(/\b(4:5|9:16|1:1)\b/);
+    const detectedAspect = aspectMatch?.[1] as '4:5' | '9:16' | '1:1' | undefined;
+
     // Step 1: upload reference images to R2 → get public URLs for kie.
     // We store refs under a separate prefix so we can clean them up later
     // if needed (results live under projects/<id>/).
@@ -121,6 +129,7 @@ export async function POST(req: Request) {
     const kieUrl = await generateImage(modelConfig.id, {
       prompt: finalPrompt,
       imageUrls,
+      aspectRatio: detectedAspect,
     });
 
     // Step 3: mirror the kie result to R2 (kie URLs expire in ~24h).
