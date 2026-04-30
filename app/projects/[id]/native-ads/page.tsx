@@ -100,8 +100,17 @@ export default function NativeAdsPage({ params }: PageProps) {
   const [projectName, setProjectName] = useState('');
   const [hasSaintGraal, setHasSaintGraal] = useState<boolean | null>(null);
 
+  // Two modes:
+  //  - 'product': classic flow — write an ad from scratch from a product brief.
+  //  - 'fromCopy': skip the copywriting, paste an existing ad copy and just
+  //    generate images that match it. Reuses the alt-image route under the hood.
+  const [mode, setMode] = useState<'product' | 'fromCopy'>('product');
+
   const [product, setProduct] = useState('');
   const [additionalContext, setAdditionalContext] = useState('');
+
+  // Paste-existing-copy state
+  const [pastedCopy, setPastedCopy] = useState('');
 
   const [output, setOutput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -110,7 +119,7 @@ export default function NativeAdsPage({ params }: PageProps) {
   const [cleanCopied, setCleanCopied] = useState(false);
   const [promptCopied, setPromptCopied] = useState(false);
 
-  // Image generation (fal.ai, fired automatically once the text stream ends).
+  // Image generation (kie.ai, fired automatically once the text stream ends).
   const [imageUrl, setImageUrl] = useState('');
   const [imageLoading, setImageLoading] = useState(false);
   const [imageError, setImageError] = useState('');
@@ -283,8 +292,18 @@ export default function NativeAdsPage({ params }: PageProps) {
   // Ask Claude for a NEW image brief — same ad copy, different moment /
   // different SOP §6 réflexe. Sends the full brief history so the model
   // doesn't repeat itself.
-  const generateAltImage = async () => {
-    if (!parsed.adCopy.trim() || altLoading) return;
+  //
+  // `opts.adCopyOverride` lets us bypass `parsed.adCopy` (used by the
+  // "from existing copy" mode where we just pasted text and the parser
+  // hasn't caught up via React state).
+  // `opts.previousBriefsOverride` same idea for briefHistory (e.g. when
+  // we want to start fresh from the pasted copy).
+  const generateAltImage = async (opts?: {
+    adCopyOverride?: string;
+    previousBriefsOverride?: ImgBrief[];
+  }) => {
+    const adCopy = (opts?.adCopyOverride ?? parsed.adCopy).trim();
+    if (!adCopy || altLoading) return;
     setAltLoading(true);
     setAltError('');
     try {
@@ -293,8 +312,8 @@ export default function NativeAdsPage({ params }: PageProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           projectId: id,
-          adCopy: parsed.adCopy,
-          previousBriefs: briefHistory,
+          adCopy,
+          previousBriefs: opts?.previousBriefsOverride ?? briefHistory,
         }),
       });
       const data = await res.json();
@@ -315,6 +334,31 @@ export default function NativeAdsPage({ params }: PageProps) {
     } finally {
       setAltLoading(false);
     }
+  };
+
+  // "From existing copy" flow: user pastes an ad they already have, we skip
+  // the copywriting step and just generate the first image brief + image.
+  // Subsequent variants are generated via the existing "Autre type d'image"
+  // button (which reads parsed.adCopy = pastedCopy because we set output).
+  const generateFromPastedCopy = async () => {
+    if (!pastedCopy.trim() || altLoading || loading) return;
+    setError('');
+    setImageUrl('');
+    setImageError('');
+    setImagePromptUsed('');
+    setImageFeedback('');
+    setActiveBrief(null);
+    setBriefHistory([]);
+    setAltError('');
+    // Make the pasted copy show up in Card 1 (parser sees it as ad copy
+    // because there's no "# IMAGE BRIEF" marker — brief stays null until
+    // alt-image returns and we setActiveBrief).
+    setOutput(pastedCopy.trim());
+    // Fire the first image brief — empty briefHistory so model is free.
+    await generateAltImage({
+      adCopyOverride: pastedCopy.trim(),
+      previousBriefsOverride: [],
+    });
   };
 
   const copyAll = async () => {
@@ -472,49 +516,112 @@ export default function NativeAdsPage({ params }: PageProps) {
               </p>
             </div>
 
+            {/* Mode tabs */}
+            <div className="flex gap-2 mb-3 border-b border-bg-border">
+              <button
+                onClick={() => setMode('product')}
+                disabled={loading || altLoading}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                  mode === 'product'
+                    ? 'text-accent-violet border-accent-violet'
+                    : 'text-text-muted border-transparent hover:text-text-secondary'
+                }`}
+              >
+                ✍︎ Depuis un produit (copy + image)
+              </button>
+              <button
+                onClick={() => setMode('fromCopy')}
+                disabled={loading || altLoading}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                  mode === 'fromCopy'
+                    ? 'text-accent-violet border-accent-violet'
+                    : 'text-text-muted border-transparent hover:text-text-secondary'
+                }`}
+              >
+                ▣ Depuis un ad copy existant (image only)
+              </button>
+            </div>
+
             {/* Inputs */}
             <div className="card p-5 space-y-4">
-              <div>
-                <label className="block text-text-primary text-sm font-semibold mb-1.5">
-                  Produit à promouvoir <span className="text-accent-red">*</span>
-                </label>
-                <textarea
-                  className="input-field w-full min-h-[100px] resize-y"
-                  placeholder="Ex: Oreiller anti-ronflement Nuviya Papillon — mémoire de forme + design ergonomique qui ouvre les voies respiratoires. 89€. Public principal: femmes 50+ dont le partenaire ronfle."
-                  value={product}
-                  onChange={(e) => setProduct(e.target.value)}
-                  disabled={loading}
-                />
-              </div>
+              {mode === 'product' ? (
+                <>
+                  <div>
+                    <label className="block text-text-primary text-sm font-semibold mb-1.5">
+                      Produit à promouvoir <span className="text-accent-red">*</span>
+                    </label>
+                    <textarea
+                      className="input-field w-full min-h-[100px] resize-y"
+                      placeholder="Ex: Oreiller anti-ronflement Nuviya Papillon — mémoire de forme + design ergonomique qui ouvre les voies respiratoires. 89€. Public principal: femmes 50+ dont le partenaire ronfle."
+                      value={product}
+                      onChange={(e) => setProduct(e.target.value)}
+                      disabled={loading}
+                    />
+                  </div>
 
-              <div>
-                <label className="block text-text-primary text-sm font-semibold mb-1.5">
-                  Contexte additionnel <span className="text-text-muted font-normal">(optionnel)</span>
-                </label>
-                <textarea
-                  className="input-field w-full min-h-[80px] resize-y"
-                  placeholder="Ex: Angle 'perspective d'une fille dont la mère ronfle' — scène intime, lit d'hôpital évoqué. Ou: utiliser l'angle apnée du sommeil."
-                  value={additionalContext}
-                  onChange={(e) => setAdditionalContext(e.target.value)}
-                  disabled={loading}
-                />
-                <p className="text-text-muted text-xs mt-1.5">
-                  Laisse vide pour laisser Claude choisir l'angle le plus fort dans le Saint Graal.
-                </p>
-              </div>
+                  <div>
+                    <label className="block text-text-primary text-sm font-semibold mb-1.5">
+                      Contexte additionnel <span className="text-text-muted font-normal">(optionnel)</span>
+                    </label>
+                    <textarea
+                      className="input-field w-full min-h-[80px] resize-y"
+                      placeholder="Ex: Angle 'perspective d'une fille dont la mère ronfle' — scène intime, lit d'hôpital évoqué. Ou: utiliser l'angle apnée du sommeil."
+                      value={additionalContext}
+                      onChange={(e) => setAdditionalContext(e.target.value)}
+                      disabled={loading}
+                    />
+                    <p className="text-text-muted text-xs mt-1.5">
+                      Laisse vide pour laisser Claude choisir l'angle le plus fort dans le Saint Graal.
+                    </p>
+                  </div>
 
-              <div className="flex items-center justify-between pt-1">
-                <p className="text-text-muted text-xs">
-                  Modèle: <span className="text-text-secondary font-medium">Claude Opus 4.7</span> · Streaming · ~1-2 min
-                </p>
-                <button
-                  onClick={generate}
-                  disabled={loading || !product.trim()}
-                  className="btn-primary"
-                >
-                  {loading ? 'Génération en cours…' : '✨ Générer la native ad'}
-                </button>
-              </div>
+                  <div className="flex items-center justify-between pt-1">
+                    <p className="text-text-muted text-xs">
+                      Modèle: <span className="text-text-secondary font-medium">Claude Opus 4.7</span> · Streaming · ~1-2 min
+                    </p>
+                    <button
+                      onClick={generate}
+                      disabled={loading || !product.trim()}
+                      className="btn-primary"
+                    >
+                      {loading ? 'Génération en cours…' : '✨ Générer la native ad'}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-text-primary text-sm font-semibold mb-1.5">
+                      Ton ad copy existant <span className="text-accent-red">*</span>
+                    </label>
+                    <textarea
+                      className="input-field w-full min-h-[200px] resize-y font-mono text-xs"
+                      placeholder="Colle ici une native ad déjà écrite (1500-3500 mots typiquement). Claude analysera le récit, choisira un moment marquant et générera un image brief Nanobanana qui illustre ce moment selon le SOP §6."
+                      value={pastedCopy}
+                      onChange={(e) => setPastedCopy(e.target.value)}
+                      disabled={altLoading}
+                    />
+                    <p className="text-text-muted text-xs mt-1.5">
+                      Astuce : après la 1ère image, clique <em>« 🎨 Autre type d'image »</em> pour générer
+                      d'autres briefs basés sur d'autres moments du récit (réflexes / principes
+                      différents du SOP §6).
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <p className="text-text-muted text-xs">
+                      Modèle: <span className="text-text-secondary font-medium">Claude Opus 4.7</span> + kie.ai · ~30-60s
+                    </p>
+                    <button
+                      onClick={generateFromPastedCopy}
+                      disabled={altLoading || !pastedCopy.trim()}
+                      className="btn-primary"
+                    >
+                      {altLoading ? 'Génération en cours…' : '🎨 Générer une image'}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Error */}
@@ -598,7 +705,7 @@ export default function NativeAdsPage({ params }: PageProps) {
                     )}
                   </div>
                   <button
-                    onClick={generateAltImage}
+                    onClick={() => void generateAltImage()}
                     disabled={altLoading || !parsed.adCopy.trim()}
                     className="btn-secondary text-xs"
                     title="Génère un AUTRE type d'image (autre moment du récit, autre réflexe SOP §6) — ce n'est pas une itération."
@@ -697,7 +804,7 @@ export default function NativeAdsPage({ params }: PageProps) {
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <h2 className="text-text-primary text-lg font-semibold">Image</h2>
-                    <span className="text-text-muted text-xs">Nano-Banana 2 · fal.ai</span>
+                    <span className="text-text-muted text-xs">Nano-Banana 2 · kie.ai</span>
                     {imageLoading && (
                       <span className="text-accent-violet text-xs flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 rounded-full bg-accent-violet animate-pulse" />
