@@ -47,7 +47,7 @@ export function buildCachedUserContent(
   images?: ImagePart[],
 ): Anthropic.MessageParam['content'] {
   const parts: Array<
-    | { type: 'text'; text: string; cache_control?: { type: 'ephemeral' } }
+    | { type: 'text'; text: string; cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' } }
     | ImagePart
   > = [];
 
@@ -55,10 +55,14 @@ export function buildCachedUserContent(
     parts.push(...images);
   }
 
+  // 1h TTL instead of the default 5min. Costs ~2× input price at write
+  // (vs 1.25× for 5min) but stays valid 12× longer. Break-even after
+  // ~2 generations within an hour — a no-brainer for bursty creative
+  // sessions where the user generates 5-10 ads in a row.
   parts.push({
     type: 'text',
     text: stablePrefix,
-    cache_control: { type: 'ephemeral' },
+    cache_control: { type: 'ephemeral', ttl: '1h' },
   });
 
   if (variableSuffix.trim().length > 0) {

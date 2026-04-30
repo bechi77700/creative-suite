@@ -102,7 +102,14 @@ export function buildGlobalKnowledgeBlock(
     ...UNIVERSAL_CATEGORIES,
   ]);
 
-  const filtered = rows.filter((r) => allowed.has(r.category));
+  // Stable sort by id (immutable cuid). Prisma's findMany without orderBy
+  // returns rows in physical disk order, which shifts on every UPDATE/INSERT
+  // and breaks prompt caching (any byte change in the cached prefix → cache
+  // miss → full re-write). Sorting by id makes the prefix deterministic.
+  const filtered = rows
+    .filter((r) => allowed.has(r.category))
+    .slice()
+    .sort((a, b) => ((a as { id?: string }).id ?? a.name).localeCompare((b as { id?: string }).id ?? b.name));
   if (filtered.length === 0) return '';
 
   const parts: string[] = [];
@@ -129,8 +136,12 @@ export function buildGlobalKnowledgeBlock(
 export function buildBrandDocumentsBlock(docs: BrandDocument[]): string {
   if (docs.length === 0) return '';
 
+  // Stable sort by id — see buildGlobalKnowledgeBlock comment. Same reason:
+  // we need a deterministic order for prompt caching to actually hit.
+  const sorted = docs.slice().sort((a, b) => a.id.localeCompare(b.id));
+
   const parts: string[] = [];
-  for (const doc of docs) {
+  for (const doc of sorted) {
     if (isTextual(doc.mimeType, doc.name)) {
       const text = decodeBase64Text(doc.content);
       if (text.trim().length === 0) continue;
