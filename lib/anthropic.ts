@@ -125,6 +125,33 @@ REFERENCE PHOTO(S) → PRODUCT IDENTITY, NOT AD STAGING (CRITICAL):
   whatever staging the concept calls for), it must match the real
   product faithfully — same colors, same construction, same details.
 
+APP-SCREENSHOT FORMATS — RENDER AS THE APP, NOT A PHONE (NON-NEGOTIABLE):
+- When the concept is "Apple Notes" / "iMessage thread" / "SMS screenshot" /
+  "Reddit post" / "Twitter/X post" / "Instagram DM" / "WhatsApp chat" /
+  "TikTok comment" / any "screenshot-of-an-app" execution — render the AD
+  as a direct full-bleed screenshot of the APP UI itself. The image IS
+  the app screen — it fills the entire frame edge to edge.
+- FORBIDDEN: device mockups around the app. No iPhone frame, no Android
+  frame, no bezel, no notch, no Dynamic Island, no rounded device
+  corners visible as a device edge, no hand holding the phone, no
+  phone-on-a-desk scene, no laptop-screen-showing-the-app. The phone /
+  laptop chrome MUST NOT appear in the image. If you can see the
+  physical edge of a device in the rendered image, the prompt failed.
+- The in-app status bar (time / signal / battery, flush with the top of
+  the image) IS allowed and even encouraged — it sells "this is real,
+  someone actually screenshot this." But it must be part of the app UI,
+  not framed inside a device shell.
+- Aspect ratio still follows the Meta-spec rule above (4:5 / 9:16 / 1:1).
+  For Notes / chat threads / long social posts, 4:5 or 9:16 work best
+  because they match how the app actually looks on a real phone.
+- Same logic for non-Apple UIs: a "Reddit post" ad is the Reddit post
+  filling the frame, not "a phone showing a Reddit post." A "text
+  message screenshot" ad is the iMessage thread filling the frame, not
+  "a hand holding a phone with a text message on it."
+- Product photos embedded INSIDE the app UI (e.g. an attached image in
+  a Note, a photo shared in iMessage) still follow the PRODUCT
+  REPRESENTATION RULE — use the uploaded reference photo verbatim.
+
 MULTIPLE REFERENCE PHOTOS — VARIANTS:
 - When several reference photos are attached, they typically represent
   variants of the same product (different colorways, sizes, or SKUs).

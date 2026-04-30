@@ -187,6 +187,25 @@ Logique de matching copy↔image (§6): l'image illustre UN moment du
 récit ou UNE preuve mentionnée — jamais le produit lui-même de façon
 directe. Une image = une idée.
 
+APP-SCREENSHOT FORMATS — RENDER AS THE APP, NOT A PHONE (NON-NEGOTIABLE):
+- When the image concept is "Apple Notes" / "iMessage" / "SMS" / "Reddit
+  post" / "Twitter/X post" / "Instagram DM" / "WhatsApp" / "TikTok
+  comment" / any "screenshot-of-an-app" execution — render the AD as a
+  direct full-bleed screenshot of the APP UI itself. The image IS the
+  app screen, edge to edge.
+- FORBIDDEN: device mockups around the app. No iPhone frame, no bezel,
+  no notch, no Dynamic Island, no rounded device corners visible as a
+  device edge, no hand holding the phone, no phone-on-a-desk scene. If
+  you can see the physical edge of a device in the rendered image, the
+  prompt failed.
+- The in-app status bar (time / signal / battery, flush with the top of
+  the image) is allowed and even encouraged — it sells "this is real,
+  someone actually screenshot this." But it must be part of the app UI,
+  not framed inside a device shell.
+- The Nanobanana prompt must explicitly say "full-bleed screenshot of
+  the [Notes / iMessage / etc.] app, no device frame, no phone bezel,
+  no hand, the app UI fills the entire image edge to edge."
+
 ─────────────────────────────────────────────
 OUTPUT FORMAT
 ─────────────────────────────────────────────
