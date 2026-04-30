@@ -3,7 +3,9 @@ import { generateImage, isKieConfigured } from '@/lib/kie';
 import { mirrorRemoteImageToR2, uploadBase64ToR2, isR2Configured } from '@/lib/r2';
 import { prisma } from '@/lib/prisma';
 
-export const maxDuration = 120;
+// 300s is the Vercel/Next ceiling. kie's nano-banana with multiple ref
+// images can take 1-2 min in queue + generation; we need this headroom.
+export const maxDuration = 300;
 
 // Supported models — kie.ai. Phase 1 keeps the 3 nano-banana variants we
 // actually use in production. Add more (flux, midjourney, etc.) once Phase 1

@@ -126,26 +126,35 @@ export async function getTaskStatus(taskId: string): Promise<KieTaskStatus> {
  * Poll until the task reaches a terminal state (success / fail) or the
  * timeout elapses. Returns the final status.
  *
- * Defaults: poll every 2s, up to 110s (we run inside a Next route with
- * maxDuration = 120s, so we leave headroom for the rest of the work).
+ * Defaults: poll every 2s, up to 280s (we run inside a Next route with
+ * maxDuration = 300s, so we leave headroom for the rest of the work).
+ * nano-banana-2 with multiple reference images can sit in queue +
+ * generate for 1-2 min, so the previous 110s ceiling was too tight.
+ *
+ * The thrown timeout error includes the last seen state so the caller
+ * can surface useful debug info (queuing vs generating vs stuck).
  */
 export async function pollTask(
   taskId: string,
   opts: { intervalMs?: number; timeoutMs?: number } = {},
 ): Promise<KieTaskStatus> {
   const intervalMs = opts.intervalMs ?? 2000;
-  const timeoutMs = opts.timeoutMs ?? 110_000;
+  const timeoutMs = opts.timeoutMs ?? 280_000;
   const deadline = Date.now() + timeoutMs;
 
   // Tiny initial delay — most generations need a few seconds anyway.
   await new Promise((r) => setTimeout(r, 1500));
 
+  let lastState: string = 'unknown';
   while (Date.now() < deadline) {
     const status = await getTaskStatus(taskId);
+    lastState = status.state;
     if (status.state === 'success' || status.state === 'fail') return status;
     await new Promise((r) => setTimeout(r, intervalMs));
   }
-  throw new Error(`kie.pollTask timeout after ${timeoutMs}ms (taskId=${taskId})`);
+  throw new Error(
+    `kie.pollTask timeout after ${timeoutMs}ms (taskId=${taskId}, lastState=${lastState})`,
+  );
 }
 
 /**
