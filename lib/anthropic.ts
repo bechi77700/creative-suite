@@ -125,6 +125,20 @@ REFERENCE PHOTO(S) → PRODUCT IDENTITY, NOT AD STAGING (CRITICAL):
   whatever staging the concept calls for), it must match the real
   product faithfully — same colors, same construction, same details.
 
+NO SHOP URL ON STATICS (NON-NEGOTIABLE):
+- NEVER include the shop URL, domain name, website address, or any
+  ".com" / ".store" / ".shop" / ".io" / etc. text in a static image.
+  No "shop at brand.com", no "brand.com" overlay, no URL in the corner,
+  no URL on the product, no URL anywhere in the frame.
+- Reason: Meta penalizes ads with visible URLs (looks like spam, hurts
+  CPM and reach), and the URL is already attached to the ad via the
+  destination link — putting it on the creative is redundant and
+  amateur-looking.
+- This applies whether the URL would appear as overlay text, on a
+  notebook, on a screenshot, on packaging, on a sign, or anywhere
+  else in the image. If the concept "needs" a URL, rewrite the concept.
+- The brand NAME (logo, wordmark) is fine — only the URL is forbidden.
+
 APP-SCREENSHOT FORMATS — RENDER AS THE APP, NOT A PHONE (NON-NEGOTIABLE):
 - When the concept is "Apple Notes" / "iMessage thread" / "SMS screenshot" /
   "Reddit post" / "Twitter/X post" / "Instagram DM" / "WhatsApp chat" /
