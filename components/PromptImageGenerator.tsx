@@ -117,21 +117,34 @@ export default function PromptImageGenerator({
     setLoading(true);
     setError('');
 
-    // When regenerating with feedback AND the model supports refs, use the
-    // previously generated image as the primary reference so the model
-    // *edits* it instead of starting from scratch. The product refs were
-    // already baked into the previous image — no need to send them again.
+    // When regenerating with feedback AND the model supports refs, send
+    // BOTH the previously generated image (so the model edits the existing
+    // composition rather than starting from scratch) AND the original
+    // product reference photos (so the product identity stays anchored to
+    // the real product, not whatever drift the previous image had).
+    //
+    // The earlier version sent ONLY the previous image, with the comment
+    // "the product refs were already baked into the previous image" — that
+    // assumption was wrong: if the previous generation drifted on the
+    // product, iterating from it just amplifies the drift.
+    //
+    // nano-banana-2 supports up to 14 reference images, so there's plenty
+    // of headroom. Ordering: previous output FIRST (anchors layout +
+    // composition), product refs AFTER (anchors product identity).
+    const productRefs: Array<{ base64: string; mimeType: string }> = refs.map(
+      (r) => ({ base64: r.base64, mimeType: r.mimeType }),
+    );
     let sendRefs: Array<{ base64: string; mimeType: string }> = [];
     if (withFeedback && imageUrl && currentModel.allowsRef) {
       const prev = await urlToBase64(imageUrl);
       if (prev) {
-        sendRefs = [prev];
+        sendRefs = [prev, ...productRefs];
       } else {
         // Couldn't fetch the previous image — fall back to original refs
-        sendRefs = refs.map((r) => ({ base64: r.base64, mimeType: r.mimeType }));
+        sendRefs = productRefs;
       }
     } else if (currentModel.allowsRef) {
-      sendRefs = refs.map((r) => ({ base64: r.base64, mimeType: r.mimeType }));
+      sendRefs = productRefs;
     }
 
     try {
