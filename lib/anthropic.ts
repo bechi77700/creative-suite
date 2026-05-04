@@ -125,6 +125,26 @@ REFERENCE PHOTO(S) → PRODUCT IDENTITY, NOT AD STAGING (CRITICAL):
   whatever staging the concept calls for), it must match the real
   product faithfully — same colors, same construction, same details.
 
+NO PRICE ON STATICS — USE THE OFFER INSTEAD (NON-NEGOTIABLE):
+- NEVER put the product price ($29, $49.99, "only 39€", etc.) on a
+  static ad. Not as overlay text, not on a label, not on a tag, not
+  spoken by a character, not anywhere in the frame.
+- Reason: a raw price is a friction trigger on cold traffic — viewers
+  judge "too expensive / too cheap" in 0.3s and scroll. The PROMOTION /
+  OFFER is what creates urgency and converts.
+- Replace any price mention with the CURRENT OFFER MECHANIC: "BOGO",
+  "Buy 2 Get 3 Free" (B2G3), "B3G5", "-50%", "-60% TODAY", "Free
+  Shipping", "2 for 1", "Bundle deal", "First order -40%", etc.
+- If no offer is provided in the brief, default to a credible discount
+  framing ("-50% LIMITED", "FREE SHIPPING", "ENDING TONIGHT") rather
+  than a raw price. Use the brand's actual offer if it appears in the
+  Saint Graal or brand docs.
+- The ONLY exception: if the user explicitly asks for the price in the
+  prompt or feedback ("show the $29 price tag", "include MSRP"), then
+  honor the request. Otherwise the rule is absolute.
+- This applies to static-brief (scratch + clone), iterate, variations,
+  batch — every static-image route.
+
 NO SHOP URL ON STATICS (NON-NEGOTIABLE):
 - NEVER include the shop URL, domain name, website address, or any
   ".com" / ".store" / ".shop" / ".io" / etc. text in a static image.
