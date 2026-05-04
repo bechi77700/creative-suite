@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { generateImage, isKieConfigured } from '@/lib/kie';
+import { generateImage, isKieConfigured, KieStuckInWaitingError } from '@/lib/kie';
 import { mirrorRemoteImageToR2, uploadBase64ToR2, isR2Configured } from '@/lib/r2';
 import { prisma } from '@/lib/prisma';
 
@@ -128,11 +128,36 @@ export async function POST(req: Request) {
     });
 
     // Step 2: submit the kie job and poll until completion.
-    const kieUrl = await generateImage(modelConfig.id, {
-      prompt: finalPrompt,
-      imageUrls,
-      aspectRatio: detectedAspect,
-    });
+    //
+    // Fallback: if the chosen model's queue ghosts every retry (kie
+    // sometimes gets task-stuck on specific models for hours), fall back
+    // to 'google/nano-banana' — the original/cheapest variant which
+    // generally has the lightest queue. Better to ship a slightly
+    // different image than to ship nothing.
+    const FALLBACK_MODEL = 'google/nano-banana';
+    let kieUrl: string;
+    let modelUsed = modelConfig.id;
+    try {
+      kieUrl = await generateImage(modelConfig.id, {
+        prompt: finalPrompt,
+        imageUrls,
+        aspectRatio: detectedAspect,
+      });
+    } catch (err) {
+      if (err instanceof KieStuckInWaitingError && modelConfig.id !== FALLBACK_MODEL) {
+        console.warn(
+          `[generate/image] ${modelConfig.id} ghosted — falling back to ${FALLBACK_MODEL}`,
+        );
+        kieUrl = await generateImage(FALLBACK_MODEL, {
+          prompt: finalPrompt,
+          imageUrls,
+          aspectRatio: detectedAspect,
+        });
+        modelUsed = `${FALLBACK_MODEL} (fallback from ${modelConfig.id})`;
+      } else {
+        throw err;
+      }
+    }
 
     // Step 3: mirror the kie result to R2 (kie URLs expire in ~24h).
     const r2Prefix = projectId ? `projects/${projectId}` : 'images';
@@ -152,7 +177,7 @@ export async function POST(req: Request) {
             module: 'static-image',
             inputs: JSON.stringify({
               prompt,
-              model: modelConfig.id,
+              model: modelUsed,
               hasRef: refs.length > 0,
               refCount: refs.length,
               feedback: feedback || undefined,
@@ -168,7 +193,7 @@ export async function POST(req: Request) {
       }
     }
 
-    return NextResponse.json({ imageUrl: persistedUrl, model: modelConfig.id, generationId, mirrored });
+    return NextResponse.json({ imageUrl: persistedUrl, model: modelUsed, generationId, mirrored });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[generate/image] ERROR:', message);
