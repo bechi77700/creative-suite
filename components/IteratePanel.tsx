@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { memo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import PromptImageGenerator from './PromptImageGenerator';
 import MultiImageInput, { RefImage } from './MultiImageInput';
@@ -427,126 +427,166 @@ export default function IteratePanel({
 
       {/* Stack of iteration runs */}
       {runs.map((run, idx) => (
-        <div key={run.id} className="border-t border-bg-border pt-4 group/run">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-text-secondary text-xs uppercase tracking-widest">
-              Iterations · run {runs.length - idx}
-              {run.loading && <span className="ml-2 text-accent-gold animate-pulse">● streaming…</span>}
-              {run.mode === 'auto' ? (
-                <span className="ml-2 text-text-muted normal-case">(✨ auto — AI-picked axes)</span>
-              ) : run.strategiesUsed.length > 0 ? (
-                <span className="ml-2 text-text-muted normal-case">
-                  ({run.strategiesUsed.join(', ')})
-                </span>
-              ) : null}
-            </p>
-            <div className="flex items-center gap-2">
-              {run.streamedText && !run.loading && (
-                <button
-                  onClick={() => copyText(run.streamedText)}
-                  className="btn-secondary text-xs px-2 py-1"
-                >
-                  Copy All
-                </button>
-              )}
-              <button
-                onClick={() => deleteRun(run.id)}
-                title="Delete this iteration set"
-                className="text-text-muted/40 hover:text-accent-red text-sm w-6 h-6 flex items-center justify-center rounded transition-colors opacity-0 group-hover/run:opacity-100"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-
-          {run.error && (
-            <div className="border border-accent-red/40 bg-accent-red/5 rounded px-3 py-2 text-xs text-accent-red mb-3">
-              {run.error}
-            </div>
-          )}
-
-          <div className="result-content">
-            {!run.streamedText && run.loading ? (
-              <div className="flex items-center gap-3 text-text-muted text-xs">
-                <div className="w-4 h-4 border-2 border-accent-gold/30 border-t-accent-gold rounded-full animate-spin" />
-                Waiting for first tokens…
-              </div>
-            ) : (
-              <ReactMarkdown
-                components={{
-                  code({ children, className }) {
-                    const isBlock = className || String(children).includes('\n');
-                    const promptText = String(children).trim();
-                    if (isBlock) {
-                      const imgState = run.imageStates[promptText];
-                      return (
-                        <div className="my-3">
-                          <div className="relative group">
-                            <pre className="bg-bg-base border border-accent-gold/25 rounded-lg p-4 text-xs text-text-primary font-mono leading-relaxed overflow-x-auto whitespace-pre-wrap">
-                              {children}
-                            </pre>
-                            <button
-                              onClick={() => copyText(promptText)}
-                              className="absolute top-2 right-2 btn-secondary text-xs px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              Copy
-                            </button>
-                          </div>
-
-                          {imgState?.status === 'generating' && (
-                            <div className="border border-bg-border rounded-lg p-5 mt-2 bg-bg-base/50 flex items-center justify-center gap-3">
-                              <div className="w-4 h-4 border-2 border-accent-gold/30 border-t-accent-gold rounded-full animate-spin" />
-                              <span className="text-text-muted text-xs">Generating image…</span>
-                            </div>
-                          )}
-                          {imgState?.status === 'error' && (
-                            <div className="border border-accent-red/40 bg-accent-red/5 rounded-lg p-3 mt-2">
-                              <p className="text-accent-red text-xs font-medium">Image generation failed</p>
-                              <p className="text-text-secondary text-xs mt-0.5">{imgState.error}</p>
-                            </div>
-                          )}
-                          {imgState?.status === 'done' && imgState.url && (
-                            <PromptImageGenerator
-                              key={`${promptText}-done`}
-                              prompt={promptText}
-                              initialImages={productRefImages.length > 0 ? productRefImages : refs}
-                              initialModel={IMAGE_MODEL}
-                              autoGenerateImageUrl={imgState.url}
-                              projectId={projectId}
-                              assetType="iterate"
-                              assetKeySuffix={`${run.id}-${hashIterPrompt(promptText)}`}
-                              winnerMeta={{ strategies: run.strategiesUsed }}
-                            />
-                          )}
-                          {!imgState && !run.loading && (
-                            <PromptImageGenerator
-                              key={`${promptText}-manual`}
-                              prompt={promptText}
-                              initialImages={productRefImages.length > 0 ? productRefImages : refs}
-                              initialModel={IMAGE_MODEL}
-                              projectId={projectId}
-                              assetType="iterate"
-                              assetKeySuffix={`${run.id}-${hashIterPrompt(promptText)}`}
-                              winnerMeta={{ strategies: run.strategiesUsed }}
-                            />
-                          )}
-                        </div>
-                      );
-                    }
-                    return (
-                      <code className="bg-bg-base px-1.5 py-0.5 rounded text-xs font-mono text-accent-gold">
-                        {children}
-                      </code>
-                    );
-                  },
-                }}
-              >
-                {run.streamedText}
-              </ReactMarkdown>
-            )}
-          </div>
-        </div>
+        <RunBlock
+          key={run.id}
+          run={run}
+          runNumber={runs.length - idx}
+          projectId={projectId}
+          imageRefs={productRefImages.length > 0 ? productRefImages : refs}
+          onDelete={deleteRun}
+          onCopy={copyText}
+        />
       ))}
     </div>
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RunBlock — one iteration run, memoized so it doesn't re-render on every
+// keystroke in the parent's textareas (otherInstructions, count, etc.).
+// Without this, typing in "Other instructions" while 3 generated runs are
+// visible re-runs ReactMarkdown over each run's full text on every keystroke
+// — the keyboard becomes visibly laggy.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface RunBlockProps {
+  run: IterationRun;
+  runNumber: number;
+  projectId: string;
+  imageRefs: RefImage[];
+  onDelete: (runId: string) => void;
+  onCopy: (text: string) => void;
+}
+
+function RunBlockImpl({ run, runNumber, projectId, imageRefs, onDelete, onCopy }: RunBlockProps) {
+  return (
+    <div className="border-t border-bg-border pt-4 group/run">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-text-secondary text-xs uppercase tracking-widest">
+          Iterations · run {runNumber}
+          {run.loading && <span className="ml-2 text-accent-gold animate-pulse">● streaming…</span>}
+          {run.mode === 'auto' ? (
+            <span className="ml-2 text-text-muted normal-case">(✨ auto — AI-picked axes)</span>
+          ) : run.strategiesUsed.length > 0 ? (
+            <span className="ml-2 text-text-muted normal-case">
+              ({run.strategiesUsed.join(', ')})
+            </span>
+          ) : null}
+        </p>
+        <div className="flex items-center gap-2">
+          {run.streamedText && !run.loading && (
+            <button
+              onClick={() => onCopy(run.streamedText)}
+              className="btn-secondary text-xs px-2 py-1"
+            >
+              Copy All
+            </button>
+          )}
+          <button
+            onClick={() => onDelete(run.id)}
+            title="Delete this iteration set"
+            className="text-text-muted/40 hover:text-accent-red text-sm w-6 h-6 flex items-center justify-center rounded transition-colors opacity-0 group-hover/run:opacity-100"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+
+      {run.error && (
+        <div className="border border-accent-red/40 bg-accent-red/5 rounded px-3 py-2 text-xs text-accent-red mb-3">
+          {run.error}
+        </div>
+      )}
+
+      <div className="result-content">
+        {!run.streamedText && run.loading ? (
+          <div className="flex items-center gap-3 text-text-muted text-xs">
+            <div className="w-4 h-4 border-2 border-accent-gold/30 border-t-accent-gold rounded-full animate-spin" />
+            Waiting for first tokens…
+          </div>
+        ) : (
+          <ReactMarkdown
+            components={{
+              code({ children, className }) {
+                const isBlock = className || String(children).includes('\n');
+                const promptText = String(children).trim();
+                if (isBlock) {
+                  const imgState = run.imageStates[promptText];
+                  return (
+                    <div className="my-3">
+                      <div className="relative group">
+                        <pre className="bg-bg-base border border-accent-gold/25 rounded-lg p-4 text-xs text-text-primary font-mono leading-relaxed overflow-x-auto whitespace-pre-wrap">
+                          {children}
+                        </pre>
+                        <button
+                          onClick={() => onCopy(promptText)}
+                          className="absolute top-2 right-2 btn-secondary text-xs px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          Copy
+                        </button>
+                      </div>
+
+                      {imgState?.status === 'generating' && (
+                        <div className="border border-bg-border rounded-lg p-5 mt-2 bg-bg-base/50 flex items-center justify-center gap-3">
+                          <div className="w-4 h-4 border-2 border-accent-gold/30 border-t-accent-gold rounded-full animate-spin" />
+                          <span className="text-text-muted text-xs">Generating image…</span>
+                        </div>
+                      )}
+                      {imgState?.status === 'error' && (
+                        <div className="border border-accent-red/40 bg-accent-red/5 rounded-lg p-3 mt-2">
+                          <p className="text-accent-red text-xs font-medium">Image generation failed</p>
+                          <p className="text-text-secondary text-xs mt-0.5">{imgState.error}</p>
+                        </div>
+                      )}
+                      {imgState?.status === 'done' && imgState.url && (
+                        <PromptImageGenerator
+                          key={`${promptText}-done`}
+                          prompt={promptText}
+                          initialImages={imageRefs}
+                          initialModel={IMAGE_MODEL}
+                          autoGenerateImageUrl={imgState.url}
+                          projectId={projectId}
+                          assetType="iterate"
+                          assetKeySuffix={`${run.id}-${hashIterPrompt(promptText)}`}
+                          winnerMeta={{ strategies: run.strategiesUsed }}
+                        />
+                      )}
+                      {!imgState && !run.loading && (
+                        <PromptImageGenerator
+                          key={`${promptText}-manual`}
+                          prompt={promptText}
+                          initialImages={imageRefs}
+                          initialModel={IMAGE_MODEL}
+                          projectId={projectId}
+                          assetType="iterate"
+                          assetKeySuffix={`${run.id}-${hashIterPrompt(promptText)}`}
+                          winnerMeta={{ strategies: run.strategiesUsed }}
+                        />
+                      )}
+                    </div>
+                  );
+                }
+                return (
+                  <code className="bg-bg-base px-1.5 py-0.5 rounded text-xs font-mono text-accent-gold">
+                    {children}
+                  </code>
+                );
+              },
+            }}
+          >
+            {run.streamedText}
+          </ReactMarkdown>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const RunBlock = memo(RunBlockImpl, (prev, next) => {
+  return (
+    prev.run === next.run &&
+    prev.runNumber === next.runNumber &&
+    prev.projectId === next.projectId &&
+    prev.imageRefs === next.imageRefs
+  );
+});

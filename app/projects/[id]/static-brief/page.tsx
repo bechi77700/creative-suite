@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import Sidebar from '@/components/Sidebar';
 import SaintGraalGate from '@/components/SaintGraalGate';
 import PromptImageGenerator, { IMAGE_MODELS } from '@/components/PromptImageGenerator';
@@ -707,7 +707,16 @@ interface RunCardProps {
   onDismissError: () => void;
 }
 
-function RunCard({
+// Wrapped in memo with custom equality below — without this, every keystroke
+// in any sibling input (Mode A context, custom instructions, etc.) re-renders
+// every RunCard, which means re-running ReactMarkdown over the full streamed
+// text and re-mounting the PromptImageGenerator children. With 3+ generated
+// statics on screen the keyboard becomes visibly laggy.
+//
+// We deliberately ignore callback prop ref changes — those don't affect render
+// output, only what fires on click. Same idea as wrapping handlers in
+// useCallback, but cheaper to reason about here.
+function RunCardImpl({
   run,
   projectId,
   initialImagesForChild,
@@ -909,3 +918,13 @@ function RunCard({
     </div>
   );
 }
+
+const RunCard = memo(RunCardImpl, (prev, next) => {
+  // Re-render only when the run data actually changes. Callback ref
+  // changes are intentionally ignored — see the comment on RunCardImpl.
+  return (
+    prev.run === next.run &&
+    prev.projectId === next.projectId &&
+    prev.initialImagesForChild === next.initialImagesForChild
+  );
+});
