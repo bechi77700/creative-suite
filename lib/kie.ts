@@ -134,22 +134,53 @@ export async function getTaskStatus(taskId: string): Promise<KieTaskStatus> {
  * The thrown timeout error includes the last seen state so the caller
  * can surface useful debug info (queuing vs generating vs stuck).
  */
+/**
+ * Thrown when a task never leaves the 'waiting' state — kie's queue
+ * occasionally creates ghost tasks that sit forever. The caller can
+ * catch this specifically to retry with a fresh taskId.
+ */
+export class KieStuckInWaitingError extends Error {
+  constructor(public readonly taskId: string, public readonly stuckMs: number) {
+    super(
+      `kie task stuck in 'waiting' state for ${stuckMs}ms (taskId=${taskId}) — likely a ghost task in the queue`,
+    );
+    this.name = 'KieStuckInWaitingError';
+  }
+}
+
 export async function pollTask(
   taskId: string,
-  opts: { intervalMs?: number; timeoutMs?: number } = {},
+  opts: { intervalMs?: number; timeoutMs?: number; stuckWaitingThresholdMs?: number } = {},
 ): Promise<KieTaskStatus> {
   const intervalMs = opts.intervalMs ?? 2000;
   const timeoutMs = opts.timeoutMs ?? 280_000;
+  // If the task never transitions out of 'waiting' after this long, treat
+  // it as a ghost (kie queue bug) and throw KieStuckInWaitingError so the
+  // caller can retry with a fresh taskId. Real tasks usually move
+  // waiting → queuing within 5-15s, so 50s is a generous floor.
+  const stuckWaitingThresholdMs = opts.stuckWaitingThresholdMs ?? 50_000;
   const deadline = Date.now() + timeoutMs;
+  const startedAt = Date.now();
 
   // Tiny initial delay — most generations need a few seconds anyway.
   await new Promise((r) => setTimeout(r, 1500));
 
   let lastState: string = 'unknown';
+  let leftWaitingAt: number | null = null;
   while (Date.now() < deadline) {
     const status = await getTaskStatus(taskId);
     lastState = status.state;
+    if (status.state !== 'waiting' && leftWaitingAt === null) {
+      leftWaitingAt = Date.now();
+    }
     if (status.state === 'success' || status.state === 'fail') return status;
+
+    // Stuck-in-waiting detection: bail early so the caller can retry with
+    // a brand new task instead of burning the whole 280s budget.
+    if (leftWaitingAt === null && Date.now() - startedAt > stuckWaitingThresholdMs) {
+      throw new KieStuckInWaitingError(taskId, Date.now() - startedAt);
+    }
+
     await new Promise((r) => setTimeout(r, intervalMs));
   }
   throw new Error(
@@ -159,17 +190,56 @@ export async function pollTask(
 
 /**
  * Convenience: create + poll + return the first result URL.
+ *
+ * Auto-retries on stuck-in-waiting (kie queue ghost). Splits the total
+ * budget across attempts: each attempt gets a short stuck-detection
+ * window (so we abandon ghosts fast) plus the remaining budget. Only
+ * KieStuckInWaitingError triggers a retry — hard failures (state ===
+ * 'fail', HTTP errors, missing resultUrls) are surfaced immediately.
  */
 export async function generateImage(
   model: string,
   input: KieCreateTaskInput,
 ): Promise<string> {
-  const { taskId } = await createTask(model, input);
-  const status = await pollTask(taskId);
-  if (status.state !== 'success') {
-    throw new Error(`kie task failed: ${status.failCode || ''} ${status.failMsg || ''}`.trim());
+  const TOTAL_BUDGET_MS = 270_000;
+  const STUCK_THRESHOLD_MS = 50_000;
+  const MAX_ATTEMPTS = 3;
+  const startedAt = Date.now();
+
+  let lastErr: Error | null = null;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const remaining = TOTAL_BUDGET_MS - (Date.now() - startedAt);
+    // Need enough headroom for stuck detection + a real generation,
+    // otherwise we're just going to time out anyway.
+    if (remaining < 60_000) break;
+
+    try {
+      const { taskId } = await createTask(model, input);
+      console.log(`[kie] attempt ${attempt}/${MAX_ATTEMPTS} taskId=${taskId}`);
+      const status = await pollTask(taskId, {
+        timeoutMs: remaining,
+        stuckWaitingThresholdMs: STUCK_THRESHOLD_MS,
+      });
+      if (status.state !== 'success') {
+        throw new Error(
+          `kie task failed: ${status.failCode || ''} ${status.failMsg || ''}`.trim(),
+        );
+      }
+      const url = status.resultUrls?.[0];
+      if (!url) throw new Error('kie task succeeded but returned no resultUrls');
+      return url;
+    } catch (err) {
+      const e = err as Error;
+      lastErr = e;
+      if (e instanceof KieStuckInWaitingError) {
+        console.warn(
+          `[kie] ${e.message} — abandoning and retrying (attempt ${attempt}/${MAX_ATTEMPTS})`,
+        );
+        continue;
+      }
+      // Any non-stuck error: don't retry, surface to caller.
+      throw e;
+    }
   }
-  const url = status.resultUrls?.[0];
-  if (!url) throw new Error('kie task succeeded but returned no resultUrls');
-  return url;
+  throw lastErr || new Error('kie.generateImage exhausted retries');
 }
