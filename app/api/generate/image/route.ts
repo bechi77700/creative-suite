@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { generateImage, isKieConfigured, KieStuckInWaitingError } from '@/lib/kie';
+import { generateImage, isKieConfigured } from '@/lib/kie';
 import { mirrorRemoteImageToR2, uploadBase64ToR2, isR2Configured } from '@/lib/r2';
 import { prisma } from '@/lib/prisma';
 
@@ -127,37 +127,29 @@ export async function POST(req: Request) {
       refCount: refs.length,
     });
 
+    // Strong product-fidelity prefix: nano-banana variants drift on the
+    // product when prompts are long and dense (lots of compositional
+    // instructions). Prepending an explicit "match the ref exactly"
+    // directive, addressed directly to the image model, dramatically
+    // reduces drift. Only added when refs are actually present.
+    const promptForKie = imageUrls && imageUrls.length > 0
+      ? `CRITICAL — PRODUCT FIDELITY: the product in this image MUST be IDENTICAL to the reference image(s) provided. Same shape, same materials, same construction, same colorway, same proportions. Do NOT invent a different product. Do NOT substitute a similar-category item. Do NOT redesign or restyle the product. Reproduce it pixel-faithful from the reference. The rest of the scene (background, lighting, composition, text overlays) follows the description below — but the PRODUCT itself is anchored to the reference photo(s).\n\n${finalPrompt}`
+      : finalPrompt;
+
     // Step 2: submit the kie job and poll until completion.
     //
-    // Fallback: if the chosen model's queue ghosts every retry (kie
-    // sometimes gets task-stuck on specific models for hours), fall back
-    // to 'google/nano-banana' — the original/cheapest variant which
-    // generally has the lightest queue. Better to ship a slightly
-    // different image than to ship nothing.
-    const FALLBACK_MODEL = 'google/nano-banana';
-    let kieUrl: string;
-    let modelUsed = modelConfig.id;
-    try {
-      kieUrl = await generateImage(modelConfig.id, {
-        prompt: finalPrompt,
-        imageUrls,
-        aspectRatio: detectedAspect,
-      });
-    } catch (err) {
-      if (err instanceof KieStuckInWaitingError && modelConfig.id !== FALLBACK_MODEL) {
-        console.warn(
-          `[generate/image] ${modelConfig.id} ghosted — falling back to ${FALLBACK_MODEL}`,
-        );
-        kieUrl = await generateImage(FALLBACK_MODEL, {
-          prompt: finalPrompt,
-          imageUrls,
-          aspectRatio: detectedAspect,
-        });
-        modelUsed = `${FALLBACK_MODEL} (fallback from ${modelConfig.id})`;
-      } else {
-        throw err;
-      }
-    }
+    // NOTE: the previous version auto-fell-back to google/nano-banana
+    // when the chosen model ghosted. We removed that — google/nano-banana
+    // drifts much harder on product fidelity than nano-banana-2/pro, so
+    // a silent fallback was producing visibly-wrong-product images. It's
+    // better to surface the queue error so the user can retry than to
+    // ship an image with a different product on it.
+    const kieUrl = await generateImage(modelConfig.id, {
+      prompt: promptForKie,
+      imageUrls,
+      aspectRatio: detectedAspect,
+    });
+    const modelUsed = modelConfig.id;
 
     // Step 3: mirror the kie result to R2 (kie URLs expire in ~24h).
     const r2Prefix = projectId ? `projects/${projectId}` : 'images';
@@ -193,7 +185,15 @@ export async function POST(req: Request) {
       }
     }
 
-    return NextResponse.json({ imageUrl: persistedUrl, model: modelUsed, generationId, mirrored });
+    return NextResponse.json({
+      imageUrl: persistedUrl,
+      model: modelUsed,
+      generationId,
+      mirrored,
+      // Surface ref usage so the client can detect cases where refs
+      // didn't reach the model — useful for debugging product drift.
+      refsUsed: imageUrls?.length ?? 0,
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[generate/image] ERROR:', message);
