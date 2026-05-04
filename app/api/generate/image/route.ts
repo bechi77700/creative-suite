@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { generateImage, isKieConfigured } from '@/lib/kie';
+import { generateImage, isKieConfigured, KieStuckInWaitingError } from '@/lib/kie';
+import { generateImageFal, isFalConfigured } from '@/lib/fal';
 import { mirrorRemoteImageToR2, uploadBase64ToR2, isR2Configured } from '@/lib/r2';
 import { prisma } from '@/lib/prisma';
 
@@ -138,18 +139,35 @@ export async function POST(req: Request) {
 
     // Step 2: submit the kie job and poll until completion.
     //
-    // NOTE: the previous version auto-fell-back to google/nano-banana
-    // when the chosen model ghosted. We removed that — google/nano-banana
-    // drifts much harder on product fidelity than nano-banana-2/pro, so
-    // a silent fallback was producing visibly-wrong-product images. It's
-    // better to surface the queue error so the user can retry than to
-    // ship an image with a different product on it.
-    const kieUrl = await generateImage(modelConfig.id, {
-      prompt: promptForKie,
-      imageUrls,
-      aspectRatio: detectedAspect,
-    });
-    const modelUsed = modelConfig.id;
+    // Fallback strategy: kie has chronic queue health issues on the
+    // nano-banana models — tasks get stuck in 'waiting' for the entire
+    // poll budget without ever moving to 'queuing'. When kie ghosts
+    // (KieStuckInWaitingError after retries), we transparently retry
+    // on fal.ai using the SAME model family. fal has been historically
+    // reliable for these models. Same product fidelity (same underlying
+    // model), same multi-ref support, just a different host.
+    let kieUrl: string;
+    let modelUsed = modelConfig.id;
+    try {
+      kieUrl = await generateImage(modelConfig.id, {
+        prompt: promptForKie,
+        imageUrls,
+        aspectRatio: detectedAspect,
+      });
+    } catch (err) {
+      if (err instanceof KieStuckInWaitingError && isFalConfigured()) {
+        console.warn(
+          `[generate/image] kie ghosted on ${modelConfig.id} — falling back to fal.ai`,
+        );
+        kieUrl = await generateImageFal(model, {
+          prompt: promptForKie,
+          imageUrls,
+        });
+        modelUsed = `${modelConfig.id} via fal.ai (kie ghosted)`;
+      } else {
+        throw err;
+      }
+    }
 
     // Step 3: mirror the kie result to R2 (kie URLs expire in ~24h).
     const r2Prefix = projectId ? `projects/${projectId}` : 'images';
