@@ -201,20 +201,9 @@ export async function generateImage(
   model: string,
   input: KieCreateTaskInput,
 ): Promise<string> {
-  // Calibration: balance between catching real ghosts fast and not
-  // false-positiving healthy-but-slow tasks. Empirically:
-  //   - real tasks transition past 'waiting' in 5-25s
-  //   - real ghosts sit forever in 'waiting'
-  //   - 40s threshold catches 99% of ghosts while letting healthy
-  //     tasks breathe
-  //   - 2 attempts (not 3) so the worst-case user wait stays under
-  //     ~110s — beyond that the UX falls apart, even when it
-  //     eventually delivers
-  //   - 110s total budget = 2 × 40s ghost-detection + headroom for one
-  //     successful generation that does start
-  const TOTAL_BUDGET_MS = 110_000;
-  const STUCK_THRESHOLD_MS = 40_000;
-  const MAX_ATTEMPTS = 2;
+  const TOTAL_BUDGET_MS = 270_000;
+  const STUCK_THRESHOLD_MS = 50_000;
+  const MAX_ATTEMPTS = 3;
   const startedAt = Date.now();
 
   let lastErr: Error | null = null;

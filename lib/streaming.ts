@@ -36,34 +36,6 @@ export async function* parseSSE(stream: ReadableStream<Uint8Array>) {
 }
 
 /**
- * Safely enqueue a chunk to a ReadableStream controller. Returns false
- * if the controller is already closed (e.g. client disconnected mid-stream).
- * Without this, post-close enqueues throw "Invalid state: Controller is
- * already closed", which can escape the route handler and cause Node to
- * reset the TCP connection — the client sees ERR_CONNECTION_RESET.
- */
-export function safeEnqueue(
-  controller: ReadableStreamDefaultController,
-  chunk: Uint8Array,
-): boolean {
-  try {
-    controller.enqueue(chunk);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** Safely close a ReadableStream controller. No-op if already closed. */
-export function safeClose(controller: ReadableStreamDefaultController): void {
-  try {
-    controller.close();
-  } catch {
-    // already closed
-  }
-}
-
-/**
  * Extract all CLOSED triple-backtick code blocks from a (possibly partial) markdown string.
  * Returns the inner text of each closed block, in order.
  */

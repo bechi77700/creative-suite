@@ -5,7 +5,6 @@ import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
 import { buildConceptInstruction, type SelectedConcept } from '@/lib/static-ad-concepts';
 import { buildFunnelStageInstruction, type FunnelStage } from '@/lib/funnel-stage';
-import { safeEnqueue, safeClose } from '@/lib/streaming';
 
 export const maxDuration = 300;
 
@@ -271,7 +270,7 @@ ${Array.from({ length: n }, (_, i) => `
             ) {
               const text = chunk.delta.text;
               fullText += text;
-              safeEnqueue(controller, encoder.encode(sse('text', { text })));
+              controller.enqueue(encoder.encode(sse('text', { text })));
             }
           }
 
@@ -285,13 +284,13 @@ ${Array.from({ length: n }, (_, i) => `
             },
           });
 
-          safeEnqueue(controller, encoder.encode(sse('done', { generationId: generation.id })));
-          safeClose(controller);
+          controller.enqueue(encoder.encode(sse('done', { generationId: generation.id })));
+          controller.close();
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err);
           console.error('[static-brief stream] ERROR:', message);
-          safeEnqueue(controller, encoder.encode(sse('error', { error: message })));
-          safeClose(controller);
+          controller.enqueue(encoder.encode(sse('error', { error: message })));
+          controller.close();
         }
       },
     });
