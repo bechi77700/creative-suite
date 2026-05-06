@@ -201,9 +201,14 @@ export async function generateImage(
   model: string,
   input: KieCreateTaskInput,
 ): Promise<string> {
-  const TOTAL_BUDGET_MS = 270_000;
-  const STUCK_THRESHOLD_MS = 50_000;
-  const MAX_ATTEMPTS = 3;
+  // Bounded by Railway/Cloudflare proxy timeout (~100-120s for a single
+  // HTTP response). If we wait longer, the connection is dropped and the
+  // client sees "Failed to fetch" instead of a clean error message.
+  // 90s total budget = 1 attempt with a generous 60s ghost threshold,
+  // leaves ~30s for an actual generation if kie does start working.
+  const TOTAL_BUDGET_MS = 90_000;
+  const STUCK_THRESHOLD_MS = 60_000;
+  const MAX_ATTEMPTS = 1;
   const startedAt = Date.now();
 
   let lastErr: Error | null = null;
