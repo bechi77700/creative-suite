@@ -201,17 +201,20 @@ export async function generateImage(
   model: string,
   input: KieCreateTaskInput,
 ): Promise<string> {
-  // Original settings from commit 5011006 — these were working reliably
-  // before the recent tuning experiments made things worse:
-  //   - 50s ghost threshold: catches real ghost tasks without
-  //     false-positiving healthy-but-slow tasks (nano-banana-2 with
-  //     multiple ref images can legitimately sit 20-35s in 'waiting')
-  //   - 3 attempts: each retry creates a fresh taskId which kie places
-  //     in a different queue position — this is what makes kie work
-  //   - 270s total budget: full headroom, fits in route maxDuration=300s
-  const TOTAL_BUDGET_MS = 270_000;
-  const STUCK_THRESHOLD_MS = 50_000;
-  const MAX_ATTEMPTS = 3;
+  // Calibration: balance between catching real ghosts fast and not
+  // false-positiving healthy-but-slow tasks. Empirically:
+  //   - real tasks transition past 'waiting' in 5-25s
+  //   - real ghosts sit forever in 'waiting'
+  //   - 40s threshold catches 99% of ghosts while letting healthy
+  //     tasks breathe
+  //   - 2 attempts (not 3) so the worst-case user wait stays under
+  //     ~110s — beyond that the UX falls apart, even when it
+  //     eventually delivers
+  //   - 110s total budget = 2 × 40s ghost-detection + headroom for one
+  //     successful generation that does start
+  const TOTAL_BUDGET_MS = 110_000;
+  const STUCK_THRESHOLD_MS = 40_000;
+  const MAX_ATTEMPTS = 2;
   const startedAt = Date.now();
 
   let lastErr: Error | null = null;
