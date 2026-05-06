@@ -3,7 +3,10 @@ import { fal } from '@fal-ai/client';
 import { mirrorRemoteImageToR2, isR2Configured } from '@/lib/r2';
 import { prisma } from '@/lib/prisma';
 
-export const maxDuration = 120;
+// 300s ceiling — fal.subscribe with multiple ref images can take 60-180s
+// for nano-banana-2/pro. 120s was too tight and was causing 502s on Railway
+// when the route exceeded the timeout.
+export const maxDuration = 300;
 
 const FAL_KEY = process.env.FAL_KEY;
 if (FAL_KEY) {
