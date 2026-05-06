@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { generateImage, isKieConfigured, KieStuckInWaitingError } from '@/lib/kie';
-import { generateImageFal, isFalConfigured } from '@/lib/fal';
+import { generateImage, isKieConfigured } from '@/lib/kie';
 import { mirrorRemoteImageToR2, uploadBase64ToR2, isR2Configured } from '@/lib/r2';
 import { prisma } from '@/lib/prisma';
 
@@ -138,36 +137,12 @@ export async function POST(req: Request) {
       : finalPrompt;
 
     // Step 2: submit the kie job and poll until completion.
-    //
-    // Fallback strategy: kie has chronic queue health issues on the
-    // nano-banana models — tasks get stuck in 'waiting' for the entire
-    // poll budget without ever moving to 'queuing'. When kie ghosts
-    // (KieStuckInWaitingError after retries), we transparently retry
-    // on fal.ai using the SAME model family. fal has been historically
-    // reliable for these models. Same product fidelity (same underlying
-    // model), same multi-ref support, just a different host.
-    let kieUrl: string;
-    let modelUsed = modelConfig.id;
-    try {
-      kieUrl = await generateImage(modelConfig.id, {
-        prompt: promptForKie,
-        imageUrls,
-        aspectRatio: detectedAspect,
-      });
-    } catch (err) {
-      if (err instanceof KieStuckInWaitingError && isFalConfigured()) {
-        console.warn(
-          `[generate/image] kie ghosted on ${modelConfig.id} — falling back to fal.ai`,
-        );
-        kieUrl = await generateImageFal(model, {
-          prompt: promptForKie,
-          imageUrls,
-        });
-        modelUsed = `${modelConfig.id} via fal.ai (kie ghosted)`;
-      } else {
-        throw err;
-      }
-    }
+    const kieUrl = await generateImage(modelConfig.id, {
+      prompt: promptForKie,
+      imageUrls,
+      aspectRatio: detectedAspect,
+    });
+    const modelUsed = modelConfig.id;
 
     // Step 3: mirror the kie result to R2 (kie URLs expire in ~24h).
     const r2Prefix = projectId ? `projects/${projectId}` : 'images';

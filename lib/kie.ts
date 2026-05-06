@@ -201,20 +201,13 @@ export async function generateImage(
   model: string,
   input: KieCreateTaskInput,
 ): Promise<string> {
-  // Constraints driving these numbers: Railway/Cloudflare/browser proxy
-  // timeouts sit around 100-120s for a single HTTP response. We MUST come
-  // back with a result (success OR error) before then or the client sees
-  // "Failed to fetch" instead of a clean message. So:
-  //   kie ghost detection: 60s (real tasks transition past 'waiting' in
-  //     5-15s; 60s is patient but not wasteful)
-  //   kie total budget when healthy: 100s (nano-banana-2 with refs is
-  //     typically 30-60s — 100s is comfortable)
-  //   No retry on ghost — straight to fal in the route handler. fal has
-  //     its own 90s timeout, total worst case = 60s kie + 90s fal = 150s.
-  //     We accept that risk; the alternative is too eager kie abandons.
-  const TOTAL_BUDGET_MS = 100_000;
-  const STUCK_THRESHOLD_MS = 60_000;
-  const MAX_ATTEMPTS = 1;
+  // Original timings — kie-only mode (no fal fallback). Generous on both
+  // ghost detection and total budget because we have nowhere else to go
+  // if kie is slow. 50s ghost threshold + 3 retries = up to 150s on
+  // ghost cases, but that fits in the 300s route maxDuration.
+  const TOTAL_BUDGET_MS = 270_000;
+  const STUCK_THRESHOLD_MS = 50_000;
+  const MAX_ATTEMPTS = 3;
   const startedAt = Date.now();
 
   let lastErr: Error | null = null;
