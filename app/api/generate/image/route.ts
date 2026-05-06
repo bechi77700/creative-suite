@@ -1,59 +1,58 @@
 import { NextResponse } from 'next/server';
-import { generateImage, isKieConfigured, KieStuckInWaitingError } from '@/lib/kie';
-import { mirrorRemoteImageToR2, uploadBase64ToR2, isR2Configured } from '@/lib/r2';
+import { fal } from '@fal-ai/client';
+import { mirrorRemoteImageToR2, isR2Configured } from '@/lib/r2';
 import { prisma } from '@/lib/prisma';
 
-// 300s is the Vercel/Next ceiling. kie's nano-banana with multiple ref
-// images can take 1-2 min in queue + generation; we need this headroom.
-export const maxDuration = 300;
+export const maxDuration = 120;
 
-// Supported models — kie.ai. Phase 1 keeps the 3 nano-banana variants we
-// actually use in production. Add more (flux, midjourney, etc.) once Phase 1
-// is validated.
-//
-// kie's API is unified: same /jobs/createTask endpoint, model picked via the
-// "model" body field. Reference images are passed as PUBLIC URLs (kie does
-// not accept base64 data URIs), so we upload base64 refs to R2 first.
+const FAL_KEY = process.env.FAL_KEY;
+if (FAL_KEY) {
+  fal.config({ credentials: FAL_KEY });
+}
+
+// Supported models — keep in sync with the dropdown on the frontend
+// Model config:
+// - id: text-to-image endpoint (used when no reference image is provided)
+// - editId: image-editing endpoint (used when a reference image IS provided) — optional
+// - supportsRefImage: true if editId exists OR id directly accepts image_urls
+// - requiresRefImage: must have a ref image to call (the model has no text-only fallback)
 const MODEL_MAP: Record<
   string,
-  { id: string; supportsRefImage: boolean; requiresRefImage: boolean }
+  { id: string; editId?: string; supportsRefImage: boolean; requiresRefImage: boolean }
 > = {
   'nano-banana': {
-    id: 'google/nano-banana',
+    id: 'fal-ai/nano-banana',
+    editId: 'fal-ai/nano-banana/edit',
     supportsRefImage: true,
     requiresRefImage: false,
   },
   'nano-banana-2': {
-    id: 'nano-banana-2',
+    id: 'fal-ai/nano-banana-2',
+    editId: 'fal-ai/nano-banana-2/edit',
     supportsRefImage: true,
     requiresRefImage: false,
   },
   'nano-banana-pro': {
-    id: 'nano-banana-pro',
+    id: 'fal-ai/nano-banana-pro',
+    editId: 'fal-ai/nano-banana-pro/edit',
     supportsRefImage: true,
     requiresRefImage: false,
   },
+  'flux-pro-ultra': { id: 'fal-ai/flux-pro/v1.1-ultra', supportsRefImage: false, requiresRefImage: false },
+  'recraft-v3': { id: 'fal-ai/recraft-v3', supportsRefImage: false, requiresRefImage: false },
+  'imagen4': { id: 'fal-ai/imagen4/preview', supportsRefImage: false, requiresRefImage: false },
 };
 
 export async function POST(req: Request) {
   try {
-    if (!isKieConfigured()) {
-      return NextResponse.json({ error: 'KIE_API_KEY env var not set on the server' }, { status: 500 });
-    }
-    if (!isR2Configured()) {
-      // R2 is now MANDATORY: we need it both to upload reference images
-      // (kie requires public URLs) and to mirror generated images (kie
-      // URLs expire in ~24h).
-      return NextResponse.json(
-        { error: 'R2 storage is not configured — required for kie.ai integration (reference image uploads + result mirroring)' },
-        { status: 500 },
-      );
+    if (!FAL_KEY) {
+      return NextResponse.json({ error: 'FAL_KEY env var not set on the server' }, { status: 500 });
     }
 
     const body = await req.json();
     const {
       prompt,
-      model = 'nano-banana-2',
+      model = 'nano-banana',
       referenceImageBase64,
       referenceMimeType,
       referenceImages,
@@ -64,8 +63,11 @@ export async function POST(req: Request) {
       model?: string;
       referenceImageBase64?: string;
       referenceMimeType?: string;
+      // New preferred shape: array of {base64, mimeType}.
       referenceImages?: Array<{ base64: string; mimeType?: string }>;
       feedback?: string;
+      // When provided, the generated image is persisted as a Generation row
+      // (module='static-image') so it shows up in the History page.
       projectId?: string;
     } = body;
 
@@ -101,73 +103,59 @@ export async function POST(req: Request) {
       ? `${prompt}\n\nUSER FEEDBACK ON PREVIOUS GENERATION (apply these corrections):\n${feedback}`
       : prompt;
 
-    // Detect Meta-spec aspect ratio from the prompt and pass it to kie
-    // explicitly. Otherwise kie defaults to "auto" and the model can output
-    // off-spec ratios (16:9 etc.) even when the prompt says "4:5". The
-    // STATIC_PRODUCT_RULE forces Claude to declare 4:5, 9:16, or 1:1 at
-    // the start — we scan for it here.
-    const aspectMatch = finalPrompt.match(/\b(4:5|9:16|1:1)\b/);
-    const detectedAspect = aspectMatch?.[1] as '4:5' | '9:16' | '1:1' | undefined;
+    // Decide which endpoint to use:
+    //   - If a reference image is provided AND the model has an /edit endpoint → use /edit
+    //   - Otherwise → use the text-to-image endpoint
+    const hasRef = refs.length > 0;
+    const endpointId = hasRef && modelConfig.editId ? modelConfig.editId : modelConfig.id;
+    const isEditEndpoint = endpointId.endsWith('/edit') || endpointId.includes('/edit');
 
-    // Step 1: upload reference images to R2 → get public URLs for kie.
-    // We store refs under a separate prefix so we can clean them up later
-    // if needed (results live under projects/<id>/).
-    const refPrefix = projectId ? `projects/${projectId}/refs` : 'refs';
-    let imageUrls: string[] | undefined;
-    if (refs.length > 0 && modelConfig.supportsRefImage) {
-      imageUrls = await Promise.all(
-        refs.map((r) => uploadBase64ToR2(r.base64, r.mimeType, refPrefix)),
-      );
-      console.log(`[generate/image] uploaded ${imageUrls.length} ref image(s) to R2`);
+    // Build the input payload depending on whether we use the edit endpoint
+    const input: Record<string, unknown> = { prompt: finalPrompt };
+
+    const dataUris = refs.map((r) => `data:${r.mimeType};base64,${r.base64}`);
+
+    if (isEditEndpoint && hasRef) {
+      // Nano-banana /edit endpoints accept multiple ref images via image_urls[]
+      input.image_urls = dataUris;
+    } else if (hasRef && modelConfig.supportsRefImage && !isEditEndpoint) {
+      // Non-nano-banana models that accept a single image_url — use the first one
+      input.image_url = dataUris[0];
     }
 
-    console.log('[generate/image] → kie', {
-      model: modelConfig.id,
-      hasRef: refs.length > 0,
-      refCount: refs.length,
+    console.log('[generate/image] →', endpointId, { hasRef, refCount: refs.length, model });
+
+    const result = await fal.subscribe(endpointId, {
+      input,
+      logs: false,
     });
 
-    // Step 2: submit the kie job and poll until completion.
-    //
-    // Fallback: if the chosen model's queue ghosts every retry (kie
-    // sometimes gets task-stuck on specific models for hours), fall back
-    // to 'google/nano-banana' — the original/cheapest variant which
-    // generally has the lightest queue. Better to ship a slightly
-    // different image than to ship nothing.
-    const FALLBACK_MODEL = 'google/nano-banana';
-    let kieUrl: string;
-    let modelUsed = modelConfig.id;
-    try {
-      kieUrl = await generateImage(modelConfig.id, {
-        prompt: finalPrompt,
-        imageUrls,
-        aspectRatio: detectedAspect,
-      });
-    } catch (err) {
-      if (err instanceof KieStuckInWaitingError && modelConfig.id !== FALLBACK_MODEL) {
-        console.warn(
-          `[generate/image] ${modelConfig.id} ghosted — falling back to ${FALLBACK_MODEL}`,
-        );
-        kieUrl = await generateImage(FALLBACK_MODEL, {
-          prompt: finalPrompt,
-          imageUrls,
-          aspectRatio: detectedAspect,
-        });
-        modelUsed = `${FALLBACK_MODEL} (fallback from ${modelConfig.id})`;
-      } else {
-        throw err;
-      }
+    // Fal returns different shapes depending on the model — normalize
+    const data = result.data as { images?: Array<{ url: string }>; image?: { url: string } };
+    const falUrl = data.images?.[0]?.url || data.image?.url;
+
+    if (!falUrl) {
+      return NextResponse.json(
+        { error: 'No image returned by Fal.ai', raw: result.data },
+        { status: 500 },
+      );
     }
 
-    // Step 3: mirror the kie result to R2 (kie URLs expire in ~24h).
+    // Mirror the Fal-hosted image to our own R2 bucket so we have a
+    // permanent copy. If R2 isn't configured we keep the Fal URL.
     const r2Prefix = projectId ? `projects/${projectId}` : 'images';
-    const persistedUrl = await mirrorRemoteImageToR2(kieUrl, r2Prefix);
-    const mirrored = persistedUrl !== kieUrl;
+    const persistedUrl = await mirrorRemoteImageToR2(falUrl, r2Prefix);
+    const mirrored = persistedUrl !== falUrl;
     if (mirrored) {
       console.log(`[generate/image] mirrored to R2: ${persistedUrl}`);
+    } else if (!isR2Configured()) {
+      console.log('[generate/image] R2 not configured — returning Fal URL directly');
     }
 
     // Persist a Generation row so the image shows up in the History page.
+    // We only do this when a projectId is provided (otherwise we have nowhere
+    // to attach it). Failures here must NOT break the response — if the DB
+    // insert fails, the user still gets their image back.
     let generationId: string | undefined;
     if (projectId) {
       try {
@@ -177,12 +165,11 @@ export async function POST(req: Request) {
             module: 'static-image',
             inputs: JSON.stringify({
               prompt,
-              model: modelUsed,
-              hasRef: refs.length > 0,
+              model: modelConfig.id,
+              hasRef,
               refCount: refs.length,
               feedback: feedback || undefined,
               mirrored,
-              provider: 'kie',
             }),
             output: persistedUrl,
           },
@@ -193,7 +180,7 @@ export async function POST(req: Request) {
       }
     }
 
-    return NextResponse.json({ imageUrl: persistedUrl, model: modelUsed, generationId, mirrored });
+    return NextResponse.json({ imageUrl: persistedUrl, model: modelConfig.id, generationId, mirrored });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[generate/image] ERROR:', message);
