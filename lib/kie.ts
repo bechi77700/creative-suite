@@ -201,23 +201,25 @@ export async function generateImage(
   model: string,
   input: KieCreateTaskInput,
 ): Promise<string> {
-  // 3 retry slots within the proxy timeout window (~100-120s). Each
-  // retry creates a fresh taskId, which kie places in a different queue
-  // position — this is the magic that makes the kie integration work
-  // most of the time. If a single taskId ghosts, the next one usually
-  // doesn't. Trade-off: shorter ghost threshold (25s vs 50s) so 3 tries
-  // fit in budget. Real tasks transition past 'waiting' in 5-15s, so
-  // 25s still catches ghosts reliably.
-  const TOTAL_BUDGET_MS = 95_000;
-  const STUCK_THRESHOLD_MS = 25_000;
+  // Original settings from commit 5011006 — these were working reliably
+  // before the recent tuning experiments made things worse:
+  //   - 50s ghost threshold: catches real ghost tasks without
+  //     false-positiving healthy-but-slow tasks (nano-banana-2 with
+  //     multiple ref images can legitimately sit 20-35s in 'waiting')
+  //   - 3 attempts: each retry creates a fresh taskId which kie places
+  //     in a different queue position — this is what makes kie work
+  //   - 270s total budget: full headroom, fits in route maxDuration=300s
+  const TOTAL_BUDGET_MS = 270_000;
+  const STUCK_THRESHOLD_MS = 50_000;
   const MAX_ATTEMPTS = 3;
   const startedAt = Date.now();
 
   let lastErr: Error | null = null;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const remaining = TOTAL_BUDGET_MS - (Date.now() - startedAt);
-    // Need enough headroom for at least one ghost-detection cycle.
-    if (remaining < STUCK_THRESHOLD_MS + 5_000) break;
+    // Need enough headroom for stuck detection + a real generation,
+    // otherwise we're just going to time out anyway.
+    if (remaining < 60_000) break;
 
     try {
       const { taskId } = await createTask(model, input);
