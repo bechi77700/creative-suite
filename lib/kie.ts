@@ -201,20 +201,19 @@ export async function generateImage(
   model: string,
   input: KieCreateTaskInput,
 ): Promise<string> {
-  // Ghost detection threshold: if kie's task stays in 'waiting' for this
-  // long without ever moving to 'queuing'/'generating', we treat it as a
-  // ghost and bail. 90s is generous — real tasks typically transition out
-  // of 'waiting' in 5-15s. We don't want to abandon a slow-but-working
-  // task just because we're impatient.
-  //
-  // No retry on ghost: if kie ghosted once, retrying the same model on
-  // the same queue almost always ghosts again. Better to go straight to
-  // the fal fallback in the route.
-  //
-  // Total budget covers the WHOLE generation when kie is healthy: 200s
-  // is enough for nano-banana-2 + 3 ref images (typical 30-90s).
-  const TOTAL_BUDGET_MS = 200_000;
-  const STUCK_THRESHOLD_MS = 90_000;
+  // Constraints driving these numbers: Railway/Cloudflare/browser proxy
+  // timeouts sit around 100-120s for a single HTTP response. We MUST come
+  // back with a result (success OR error) before then or the client sees
+  // "Failed to fetch" instead of a clean message. So:
+  //   kie ghost detection: 60s (real tasks transition past 'waiting' in
+  //     5-15s; 60s is patient but not wasteful)
+  //   kie total budget when healthy: 100s (nano-banana-2 with refs is
+  //     typically 30-60s — 100s is comfortable)
+  //   No retry on ghost — straight to fal in the route handler. fal has
+  //     its own 90s timeout, total worst case = 60s kie + 90s fal = 150s.
+  //     We accept that risk; the alternative is too eager kie abandons.
+  const TOTAL_BUDGET_MS = 100_000;
+  const STUCK_THRESHOLD_MS = 60_000;
   const MAX_ATTEMPTS = 1;
   const startedAt = Date.now();
 

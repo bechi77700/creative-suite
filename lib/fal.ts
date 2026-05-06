@@ -78,10 +78,20 @@ export async function generateImageFal(
 
   console.log(`[fal] → ${endpointId}`, { hasRef, refCount: input.imageUrls?.length ?? 0 });
 
-  const result = await fal.subscribe(endpointId, {
-    input: payload,
-    logs: false,
-  });
+  // Hard timeout on fal.subscribe — without this, a slow fal call could
+  // push the route past Railway's edge proxy timeout (~120s) and the
+  // client sees "Failed to fetch" instead of a clean error response.
+  // 90s is enough for nano-banana with multiple refs (typical 20-60s).
+  const FAL_TIMEOUT_MS = 90_000;
+  const result = await Promise.race([
+    fal.subscribe(endpointId, { input: payload, logs: false }),
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`fal.subscribe timeout after ${FAL_TIMEOUT_MS}ms (model=${endpointId})`)),
+        FAL_TIMEOUT_MS,
+      ),
+    ),
+  ]);
 
   const data = result.data as { images?: Array<{ url: string }>; image?: { url: string } };
   const url = data.images?.[0]?.url || data.image?.url;
