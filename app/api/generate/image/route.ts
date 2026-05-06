@@ -137,6 +137,13 @@ export async function POST(req: Request) {
       : finalPrompt;
 
     // Step 2: submit the kie job and poll until completion.
+    //
+    // NOTE: the previous version auto-fell-back to google/nano-banana
+    // when the chosen model ghosted. We removed that — google/nano-banana
+    // drifts much harder on product fidelity than nano-banana-2/pro, so
+    // a silent fallback was producing visibly-wrong-product images. It's
+    // better to surface the queue error so the user can retry than to
+    // ship an image with a different product on it.
     const kieUrl = await generateImage(modelConfig.id, {
       prompt: promptForKie,
       imageUrls,

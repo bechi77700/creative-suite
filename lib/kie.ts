@@ -201,10 +201,6 @@ export async function generateImage(
   model: string,
   input: KieCreateTaskInput,
 ): Promise<string> {
-  // Original timings — kie-only mode (no fal fallback). Generous on both
-  // ghost detection and total budget because we have nowhere else to go
-  // if kie is slow. 50s ghost threshold + 3 retries = up to 150s on
-  // ghost cases, but that fits in the 300s route maxDuration.
   const TOTAL_BUDGET_MS = 270_000;
   const STUCK_THRESHOLD_MS = 50_000;
   const MAX_ATTEMPTS = 3;
