@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL_FAST, GENERATION_RULES, STATIC_PRODUCT_RULE, STATIC_VISUAL_DIRECTION_RULE } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
+import { safeEnqueue, safeClose } from '@/lib/streaming';
 
 export const maxDuration = 300;
 
@@ -228,7 +229,7 @@ ${mode === 'auto' ? '\n**Why this axis:** [one sentence — what you diagnosed a
             ) {
               const text = chunk.delta.text;
               fullText += text;
-              controller.enqueue(encoder.encode(sse('text', { text })));
+              safeEnqueue(controller, encoder.encode(sse('text', { text })));
             }
           }
 
@@ -248,13 +249,13 @@ ${mode === 'auto' ? '\n**Why this axis:** [one sentence — what you diagnosed a
             },
           });
 
-          controller.enqueue(encoder.encode(sse('done', { generationId: generation.id })));
-          controller.close();
+          safeEnqueue(controller, encoder.encode(sse('done', { generationId: generation.id })));
+          safeClose(controller);
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err);
           console.error('[iterate stream] ERROR:', message);
-          controller.enqueue(encoder.encode(sse('error', { error: message })));
-          controller.close();
+          safeEnqueue(controller, encoder.encode(sse('error', { error: message })));
+          safeClose(controller);
         }
       },
     });

@@ -4,6 +4,7 @@ import { getAnthropic, MODEL, GENERATION_RULES } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
 import { buildFunnelStageInstruction, type FunnelStage } from '@/lib/funnel-stage';
+import { safeEnqueue, safeClose } from '@/lib/streaming';
 
 export const maxDuration = 300;
 
@@ -88,17 +89,17 @@ Make them diverse: mix pain points, mechanism, results, social proof, story, com
             chunk.type === 'content_block_delta' &&
             chunk.delta.type === 'text_delta'
           ) {
-            controller.enqueue(encoder.encode(sse('text', { text: chunk.delta.text })));
+            safeEnqueue(controller, encoder.encode(sse('text', { text: chunk.delta.text })));
           }
         }
 
-        controller.enqueue(encoder.encode(sse('done', {})));
-        controller.close();
+        safeEnqueue(controller, encoder.encode(sse('done', {})));
+        safeClose(controller);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         console.error('[video-angles stream] ERROR:', message);
-        controller.enqueue(encoder.encode(sse('error', { error: message })));
-        controller.close();
+        safeEnqueue(controller, encoder.encode(sse('error', { error: message })));
+        safeClose(controller);
       }
     },
   });

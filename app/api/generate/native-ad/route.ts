@@ -30,6 +30,7 @@ import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL_SMART, GENERATION_RULES } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
+import { safeEnqueue, safeClose } from '@/lib/streaming';
 
 export const maxDuration = 300;
 
@@ -289,7 +290,7 @@ réflexe(s) parmi les 4 elle déclenche.]`;
             chunk.delta.type === 'text_delta'
           ) {
             fullOutput += chunk.delta.text;
-            controller.enqueue(encoder.encode(sse('text', { text: chunk.delta.text })));
+            safeEnqueue(controller, encoder.encode(sse('text', { text: chunk.delta.text })));
           }
         }
 
@@ -303,22 +304,22 @@ réflexe(s) parmi les 4 elle déclenche.]`;
               output: fullOutput,
             },
           });
-          controller.enqueue(
+          safeEnqueue(controller, 
             encoder.encode(sse('done', { generationId: generation.id })),
           );
         } catch (persistErr) {
           // Don't fail the whole stream if persistence fails — the user already
           // has the text on screen.
           console.error('[native-ad] persist failed:', persistErr);
-          controller.enqueue(encoder.encode(sse('done', {})));
+          safeEnqueue(controller, encoder.encode(sse('done', {})));
         }
 
-        controller.close();
+        safeClose(controller);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         console.error('[native-ad stream] ERROR:', message);
-        controller.enqueue(encoder.encode(sse('error', { error: message })));
-        controller.close();
+        safeEnqueue(controller, encoder.encode(sse('error', { error: message })));
+        safeClose(controller);
       }
     },
   });

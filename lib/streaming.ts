@@ -36,6 +36,34 @@ export async function* parseSSE(stream: ReadableStream<Uint8Array>) {
 }
 
 /**
+ * Safe wrappers for ReadableStream controller operations. Without these,
+ * any post-close operation (e.g. client disconnected mid-stream and we
+ * try to send a final event) throws "Invalid state: Controller is
+ * already closed" — which then bubbles into the catch block and tries
+ * to enqueue an error event, which throws the same error, etc. The
+ * symptom on the client is a successful generation marked as failed.
+ */
+export function safeEnqueue(
+  controller: ReadableStreamDefaultController,
+  chunk: Uint8Array,
+): boolean {
+  try {
+    controller.enqueue(chunk);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function safeClose(controller: ReadableStreamDefaultController): void {
+  try {
+    controller.close();
+  } catch {
+    // already closed — no-op
+  }
+}
+
+/**
  * Extract all CLOSED triple-backtick code blocks from a (possibly partial) markdown string.
  * Returns the inner text of each closed block, in order.
  */
