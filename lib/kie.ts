@@ -201,9 +201,13 @@ export async function generateImage(
   model: string,
   input: KieCreateTaskInput,
 ): Promise<string> {
-  const TOTAL_BUDGET_MS = 270_000;
-  const STUCK_THRESHOLD_MS = 50_000;
-  const MAX_ATTEMPTS = 3;
+  // Tighter budget so the route can fall back to fal.ai before Railway's
+  // edge proxy times out the request. 2 attempts × 35s ghost threshold =
+  // ~70s on kie max, leaving ~150-200s for the fal fallback inside the
+  // route's 300s maxDuration.
+  const TOTAL_BUDGET_MS = 90_000;
+  const STUCK_THRESHOLD_MS = 35_000;
+  const MAX_ATTEMPTS = 2;
   const startedAt = Date.now();
 
   let lastErr: Error | null = null;
