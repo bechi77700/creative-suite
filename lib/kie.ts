@@ -201,13 +201,21 @@ export async function generateImage(
   model: string,
   input: KieCreateTaskInput,
 ): Promise<string> {
-  // Tighter budget so the route can fall back to fal.ai before Railway's
-  // edge proxy times out the request. 2 attempts × 35s ghost threshold =
-  // ~70s on kie max, leaving ~150-200s for the fal fallback inside the
-  // route's 300s maxDuration.
-  const TOTAL_BUDGET_MS = 90_000;
-  const STUCK_THRESHOLD_MS = 35_000;
-  const MAX_ATTEMPTS = 2;
+  // Ghost detection threshold: if kie's task stays in 'waiting' for this
+  // long without ever moving to 'queuing'/'generating', we treat it as a
+  // ghost and bail. 90s is generous — real tasks typically transition out
+  // of 'waiting' in 5-15s. We don't want to abandon a slow-but-working
+  // task just because we're impatient.
+  //
+  // No retry on ghost: if kie ghosted once, retrying the same model on
+  // the same queue almost always ghosts again. Better to go straight to
+  // the fal fallback in the route.
+  //
+  // Total budget covers the WHOLE generation when kie is healthy: 200s
+  // is enough for nano-banana-2 + 3 ref images (typical 30-90s).
+  const TOTAL_BUDGET_MS = 200_000;
+  const STUCK_THRESHOLD_MS = 90_000;
+  const MAX_ATTEMPTS = 1;
   const startedAt = Date.now();
 
   let lastErr: Error | null = null;
