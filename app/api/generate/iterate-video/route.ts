@@ -68,6 +68,7 @@ export async function POST(req: Request) {
       videoAnalysis = null,
       axes = [],
       otherInstructions = '',
+      editorInstructions = '',
       count,
     }: {
       projectId: string;
@@ -75,6 +76,7 @@ export async function POST(req: Request) {
       videoAnalysis?: VideoAnalysis | null;
       axes?: string[];
       otherInstructions?: string;
+      editorInstructions?: string;
       count?: number;
     } = body;
 
@@ -127,6 +129,10 @@ ${originalScript.trim()}`;
       ? `\nADDITIONAL CUSTOM INSTRUCTIONS FROM USER (apply as a high-priority constraint — if the user opens the door to new claims, use the inline tag [NEW CLAIM] on each new factual claim you add):\n${otherInstructions.trim()}`
       : '';
 
+    const editorBlock = editorInstructions.trim()
+      ? `\n\nGENERAL EDITOR INSTRUCTIONS (treat as soft guidance — let them shape tone, voice, pacing, hook angle, but never override the SOP's axis rules):\n${editorInstructions.trim()}`
+      : '';
+
     const stablePrefix = `${GENERATION_RULES}
 
 You are running the **Iterate Video** SOP for a Meta Ads VIDEO SCRIPT that has ALREADY been validated as a winner. Follow the SOP that lives in the brand's Knowledge Base ("iterate-video-sop.md") — it defines the 10-axis closed catalog, Auto vs User-directed mode, the 1-2 axes-per-sibling rule, and the required output format.
@@ -149,7 +155,7 @@ ITERATION CONFIG
 ─────────────────────────────────────────────
 ${modeBlock}
 Number of siblings to generate: ${n}
-${otherBlock}
+${otherBlock}${editorBlock}
 
 ─────────────────────────────────────────────
 HARD RULES (from the SOP)

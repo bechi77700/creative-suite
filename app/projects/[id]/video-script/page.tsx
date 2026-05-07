@@ -129,6 +129,7 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
           projectId: id,
           videoAnalysis: cloneAnalysis,
           additionalContext: cloneAdditional,
+          editorInstructions,
           count: n,
         }),
       });
@@ -181,6 +182,9 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
   const [anglesLoading, setAnglesLoading] = useState(false);
   const [selectedAngle, setSelectedAngle] = useState('');
   const [additionalContext, setAdditionalContext] = useState('');
+  // General "editor instructions" — broad direction (VO gender, editing style,
+  // mandatory hook elements). Soft guidance, not strict constraints.
+  const [editorInstructions, setEditorInstructions] = useState('');
   const [checkedAngleIds, setCheckedAngleIds] = useState<Set<string>>(new Set());
 
   const parsedAngles = useMemo(() => parseAngles(angles), [angles]);
@@ -272,6 +276,7 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
           length: selectedLength,
           angle: angleText,
           additionalContext,
+          editorInstructions,
           funnelStage,
         }),
       });
@@ -378,6 +383,7 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
           length: run.length,
           angle: selectedAngle || '(see previous script)',
           additionalContext,
+          editorInstructions,
           previousOutput: run.output,
           feedback: run.feedback,
         }),
@@ -612,6 +618,19 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
                   />
                 </div>
 
+                <div>
+                  <label className="text-text-muted text-xs mb-1.5 block mt-3">
+                    Editor Instructions <span className="text-text-muted/70 normal-case">— general direction (optional)</span>
+                  </label>
+                  <textarea
+                    className="input-field resize-none text-xs"
+                    rows={3}
+                    placeholder="e.g. masculine VO · fast cuts, b-roll heavy · must hook with a stat shock in the first 1.5s · keep tone serious"
+                    value={editorInstructions}
+                    onChange={(e) => setEditorInstructions(e.target.value)}
+                  />
+                </div>
+
                 {checkedAngleIds.size >= 2 ? (
                   <div className="mt-3 space-y-1.5">
                     <button
@@ -676,6 +695,19 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
                   placeholder='e.g. "lean on the 30-day refund", "target men 35+", "we want a softer CTA"'
                   value={cloneAdditional}
                   onChange={(e) => setCloneAdditional(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="text-text-muted text-xs mb-1.5 block uppercase tracking-widest">
+                  Editor instructions <span className="normal-case">(general direction, optional)</span>
+                </label>
+                <textarea
+                  className="input-field resize-none text-xs"
+                  rows={3}
+                  placeholder="e.g. masculine VO · fast cuts, b-roll heavy · must hook with a stat shock in the first 1.5s · keep tone serious"
+                  value={editorInstructions}
+                  onChange={(e) => setEditorInstructions(e.target.value)}
                 />
               </div>
 

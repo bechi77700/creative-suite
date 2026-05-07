@@ -69,6 +69,7 @@ export default function VideoIteratePanel({
 }: Props) {
   const [axes, setAxes] = useState<Set<string>>(new Set());
   const [otherInstructions, setOtherInstructions] = useState('');
+  const [editorInstructions, setEditorInstructions] = useState('');
   const [count, setCount] = useState('4');
 
   const [runs, setRuns] = useState<ScriptRun[]>([]);
@@ -124,6 +125,7 @@ export default function VideoIteratePanel({
           videoAnalysis,
           axes: Array.from(axes),
           otherInstructions,
+          editorInstructions,
           count: n,
         }),
       });
@@ -299,6 +301,19 @@ export default function VideoIteratePanel({
           placeholder='e.g. "push urgency further" / "test versions targeting men 40+" / "we can mention the 30-day refund [NEW CLAIM]"'
           value={otherInstructions}
           onChange={(e) => setOtherInstructions(e.target.value)}
+        />
+      </div>
+
+      <div>
+        <label className="text-text-muted text-[10px] uppercase tracking-widest block mb-1">
+          Editor instructions <span className="normal-case">(general direction, optional)</span>
+        </label>
+        <textarea
+          className="input-field resize-none text-xs"
+          rows={3}
+          placeholder="e.g. masculine VO · fast cuts, b-roll heavy · must hook with a stat shock in the first 1.5s · keep tone serious"
+          value={editorInstructions}
+          onChange={(e) => setEditorInstructions(e.target.value)}
         />
       </div>
 

@@ -59,11 +59,13 @@ export async function POST(req: Request) {
       projectId,
       videoAnalysis,
       additionalContext = '',
+      editorInstructions = '',
       count,
     }: {
       projectId: string;
       videoAnalysis: VideoAnalysis;
       additionalContext?: string;
+      editorInstructions?: string;
       count?: number;
     } = body;
 
@@ -91,6 +93,10 @@ export async function POST(req: Request) {
       ? `\nADDITIONAL CONTEXT FROM USER (apply as a high-priority constraint):\n${additionalContext.trim()}`
       : '';
 
+    const editorBlock = editorInstructions.trim()
+      ? `\n\nGENERAL EDITOR INSTRUCTIONS (treat as soft guidance — let them shape tone, voice, pacing, hook angle, but never override the SOP's structural rules):\n${editorInstructions.trim()}`
+      : '';
+
     const stablePrefix = `${GENERATION_RULES}
 
 You are running the **Clone & Adapt** SOP for a Meta Ads VIDEO SCRIPT. Follow the SOP that lives in the brand's Knowledge Base ("clone-and-adapt-video-sop.md") — it defines the mandatory two-phase output (Structural Autopsy + Adapted Scripts), the ±10% word-count rule, the same-blocks-same-order rule, the Copy DNA preservation, and the no-fabrication-of-brand-facts rule.
@@ -115,7 +121,7 @@ GENERATION CONFIG
 ─────────────────────────────────────────────
 Number of adapted scripts to produce: ${n}
 Output language: English (US market)
-${additionalBlock}
+${additionalBlock}${editorBlock}
 
 ─────────────────────────────────────────────
 HARD RULES (from the SOP — non-negotiable)

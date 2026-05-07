@@ -10,7 +10,7 @@ export const maxDuration = 300;
 export async function POST(req: Request) {
   try {
   const body = await req.json();
-  const { projectId, format, length, angle, additionalContext, previousOutput, feedback, funnelStage } = body;
+  const { projectId, format, length, angle, additionalContext, editorInstructions, previousOutput, feedback, funnelStage } = body;
   const funnelBlock = buildFunnelStageInstruction(funnelStage);
 
   const project = await prisma.brandProject.findUnique({
@@ -54,11 +54,19 @@ BRAND: ${project.name}
 GLOBAL KNOWLEDGE: ${knowledgeContext || '(none)'}
 BRAND DOCS: ${brandContext || '(none)'}`;
 
+  const editorBlock = editorInstructions?.trim() ? `
+
+─────────────────────────────────────────────
+GENERAL EDITOR INSTRUCTIONS (treat as soft guidance — let them shape tone, pacing, voice, and hook angle)
+─────────────────────────────────────────────
+${editorInstructions.trim()}` : '';
+
   const variableSuffix = `VIDEO FORMAT: ${format}
 TARGET LENGTH: ${length} (~${wordCount} words of spoken script)
 ANGLE: ${angle}
 ${additionalContext ? `ADDITIONAL CONTEXT: ${additionalContext}` : ''}
 ${funnelBlock}
+${editorBlock}
 ${refineSection}
 
 Write a complete, ready-to-shoot video ad script.

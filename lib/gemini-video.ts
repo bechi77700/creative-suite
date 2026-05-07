@@ -183,10 +183,31 @@ export async function analyzeVideo(
     },
   });
 
-  const result = await model.generateContent([
-    { fileData: { mimeType: file.mimeType, fileUri: file.uri } },
-    { text: ANALYSIS_PROMPT },
-  ]);
+  // Gemini occasionally returns 503 'high demand' on specific models
+  // even when their broader status page shows green. Retry with backoff
+  // so transient spikes don't fail the user's request.
+  const MAX_RETRIES = 3;
+  let result;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      result = await model.generateContent([
+        { fileData: { mimeType: file.mimeType, fileUri: file.uri } },
+        { text: ANALYSIS_PROMPT },
+      ]);
+      break;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const is503 = msg.includes('503') || msg.toLowerCase().includes('service unavailable') || msg.toLowerCase().includes('high demand');
+      if (is503 && attempt < MAX_RETRIES) {
+        const waitMs = 2000 * attempt; // 2s, 4s, 6s
+        console.warn(`[analyze-video] Gemini 503 (attempt ${attempt}/${MAX_RETRIES}) — retrying in ${waitMs}ms…`);
+        await new Promise((r) => setTimeout(r, waitMs));
+        continue;
+      }
+      throw err;
+    }
+  }
+  if (!result) throw new Error('Gemini analyze: no result after retries');
 
   const text = result.response.text();
   let analysis: VideoAnalysis;
