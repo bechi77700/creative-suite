@@ -64,10 +64,9 @@ prisma/schema.prisma       BrandProject, BrandDocument, GlobalKnowledge, Generat
 ## Hard rules — do not violate
 
 ### Models — pick by route, not by default
-- `MODEL_SMART = 'claude-opus-4-7'` → **strategy** routes (creative direction, angles, scripts from scratch, native ads).
-- `MODEL_FAST = 'claude-sonnet-4-6'` → **execution** routes (variations, iterate, clone, batch, headlines, long-form generation where Opus is too expensive).
+- `MODEL_SMART = 'claude-sonnet-4-6'` and `MODEL_FAST = 'claude-sonnet-4-6'` — **both point to Sonnet 4.6 right now.** The SMART/FAST split is a preserved seam, not a live divergence: import the constant that matches the route's intent (strategy → SMART, execution → FAST) so we can re-promote strategy routes to Opus later by flipping a single line.
 - `MODEL` (legacy alias) = `MODEL_SMART`. Avoid in new code; pick explicitly.
-- For mixed routes (e.g. static-brief: scratch=SMART, clone=FAST), branch on the mode.
+- For mixed routes (e.g. static-brief: scratch=SMART, clone=FAST), keep branching on the mode even though both branches resolve to the same model today.
 - `max_tokens`: native ads use 32k. Other routes 3-4k unless they output long lists.
 
 ### Saint Graal gate — every generation route

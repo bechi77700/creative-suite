@@ -6,16 +6,14 @@ export function getAnthropic() {
   return new Anthropic({ apiKey });
 }
 
-// Hybrid model strategy:
-//  - SMART (Opus 4.7) → "strategy" routes where reasoning quality drives ROI
-//    (video angles, video scripts, scratch hooks, scratch static briefs).
-//  - FAST  (Sonnet 4.6) → "execution" routes that variate or clone an existing
-//    winner (variations, iterate, clone-and-adapt). Quality bar is "preserve
-//    what works"; raw reasoning matters less, latency + cost matter more.
+// All routes currently run on Sonnet 4.6 — the SMART/FAST split is preserved
+// as a seam (so we can re-promote strategy routes to Opus later without
+// touching every call site), but both constants point to the same model for
+// now. Cost + latency over peak reasoning was the call.
 //
 // MODEL is kept as an alias of MODEL_SMART for legacy imports — every route
 // should pick MODEL_SMART or MODEL_FAST explicitly.
-export const MODEL_SMART = 'claude-opus-4-7';
+export const MODEL_SMART = 'claude-sonnet-4-6';
 export const MODEL_FAST = 'claude-sonnet-4-6';
 export const MODEL = MODEL_SMART;
 
