@@ -157,8 +157,10 @@ export async function pollTask(
   // If the task never transitions out of 'waiting' after this long, treat
   // it as a ghost (kie queue bug) and throw KieStuckInWaitingError so the
   // caller can retry with a fresh taskId. Real tasks usually move
-  // waiting → queuing within 5-15s, so 50s is a generous floor.
-  const stuckWaitingThresholdMs = opts.stuckWaitingThresholdMs ?? 50_000;
+  // waiting → queuing within 5-15s under normal load, but kie's queue can
+  // sit in waiting for 60-90s under pressure — 120s is the new floor.
+  // Callers (generateImage) override this; the default here matches.
+  const stuckWaitingThresholdMs = opts.stuckWaitingThresholdMs ?? 120_000;
   const deadline = Date.now() + timeoutMs;
   const startedAt = Date.now();
 
@@ -202,8 +204,13 @@ export async function generateImage(
   input: KieCreateTaskInput,
 ): Promise<string> {
   const TOTAL_BUDGET_MS = 270_000;
-  const STUCK_THRESHOLD_MS = 50_000;
-  const MAX_ATTEMPTS = 3;
+  // Patience > retry: kie's queue is sometimes legitimately slow (60-100s in
+  // 'waiting' before transitioning to 'queuing'/'generating'). The previous
+  // 50s threshold + 3 retries was producing "stuck in waiting" errors on
+  // tasks that would have succeeded if we'd just waited. Bumped to 120s with
+  // 2 attempts — same total budget, fewer false positives.
+  const STUCK_THRESHOLD_MS = 120_000;
+  const MAX_ATTEMPTS = 2;
   const startedAt = Date.now();
 
   let lastErr: Error | null = null;
