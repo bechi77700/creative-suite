@@ -692,6 +692,7 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
               onCopyPrompt={(t) => copyText(t)}
               onSetIterating={(t) => updateRun(run.id, { iteratingPromptText: t })}
               onDismissError={() => updateRun(run.id, { error: '' })}
+              onRetryImage={(t) => fireImageGen(run.id, t)}
             />
           ))}
         </div>
@@ -717,6 +718,9 @@ interface RunCardProps {
   onCopyPrompt: (text: string) => void;
   onSetIterating: (text: string | null) => void;
   onDismissError: () => void;
+  /** Retry a failed auto-fire image generation, reusing the same prompt +
+   *  reference photos + model that were captured on the run. */
+  onRetryImage: (promptText: string) => void;
 }
 
 // Wrapped in memo with custom equality below — without this, every keystroke
@@ -740,6 +744,7 @@ function RunCardImpl({
   onCopyPrompt,
   onSetIterating,
   onDismissError,
+  onRetryImage,
 }: RunCardProps) {
   return (
     <div className="space-y-4 group/run">
@@ -870,8 +875,19 @@ function RunCardImpl({
                             )}
                             {imgState?.status === 'error' && (
                               <div className="border border-accent-red/40 bg-accent-red/5 rounded-lg p-3 mt-3">
-                                <p className="text-accent-red text-xs font-medium">Image generation failed</p>
-                                <p className="text-text-secondary text-xs mt-0.5">{imgState.error}</p>
+                                <div className="flex items-start gap-3">
+                                  <div className="flex-1">
+                                    <p className="text-accent-red text-xs font-medium">Image generation failed</p>
+                                    <p className="text-text-secondary text-xs mt-0.5">{imgState.error}</p>
+                                  </div>
+                                  <button
+                                    onClick={() => onRetryImage(promptText)}
+                                    className="btn-primary text-xs px-3 py-1.5 flex-shrink-0"
+                                    title="Re-run this image generation with the same prompt and reference photos"
+                                  >
+                                    ↻ Retry
+                                  </button>
+                                </div>
                                 <PromptImageGenerator
                                   prompt={promptText}
                                   initialImages={initialImagesForChild}

@@ -441,6 +441,7 @@ export default function IteratePanel({
           imageRefs={productRefImages.length > 0 ? productRefImages : refs}
           onDelete={deleteRun}
           onCopy={copyText}
+          onRetryImage={fireImageGen}
         />
       ))}
     </div>
@@ -462,9 +463,11 @@ interface RunBlockProps {
   imageRefs: RefImage[];
   onDelete: (runId: string) => void;
   onCopy: (text: string) => void;
+  /** Retry a failed auto-fire image generation for this run. */
+  onRetryImage: (runId: string, promptText: string) => void;
 }
 
-function RunBlockImpl({ run, runNumber, projectId, imageRefs, onDelete, onCopy }: RunBlockProps) {
+function RunBlockImpl({ run, runNumber, projectId, imageRefs, onDelete, onCopy, onRetryImage }: RunBlockProps) {
   return (
     <div className="border-t border-bg-border pt-4 group/run">
       <div className="flex items-center justify-between mb-3">
@@ -539,9 +542,18 @@ function RunBlockImpl({ run, runNumber, projectId, imageRefs, onDelete, onCopy }
                         </div>
                       )}
                       {imgState?.status === 'error' && (
-                        <div className="border border-accent-red/40 bg-accent-red/5 rounded-lg p-3 mt-2">
-                          <p className="text-accent-red text-xs font-medium">Image generation failed</p>
-                          <p className="text-text-secondary text-xs mt-0.5">{imgState.error}</p>
+                        <div className="border border-accent-red/40 bg-accent-red/5 rounded-lg p-3 mt-2 flex items-start gap-3">
+                          <div className="flex-1">
+                            <p className="text-accent-red text-xs font-medium">Image generation failed</p>
+                            <p className="text-text-secondary text-xs mt-0.5">{imgState.error}</p>
+                          </div>
+                          <button
+                            onClick={() => onRetryImage(run.id, promptText)}
+                            className="btn-primary text-xs px-3 py-1.5 flex-shrink-0"
+                            title="Re-run with the same prompt and reference photos"
+                          >
+                            ↻ Retry
+                          </button>
                         </div>
                       )}
                       {imgState?.status === 'done' && imgState.url && (
