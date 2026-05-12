@@ -148,6 +148,18 @@ export class KieStuckInWaitingError extends Error {
   }
 }
 
+/**
+ * Thrown when a kie task actually ran and returned state === 'fail'. This is
+ * a HARD failure (the model itself refused / errored / produced no image) —
+ * retrying with the same prompt won't help. Surface immediately.
+ */
+export class KieTaskFailedError extends Error {
+  constructor(public readonly taskId: string, public readonly failCode?: string, public readonly failMsg?: string) {
+    super(`kie task failed: ${failCode || ''} ${failMsg || ''}`.trim());
+    this.name = 'KieTaskFailedError';
+  }
+}
+
 export async function pollTask(
   taskId: string,
   opts: { intervalMs?: number; timeoutMs?: number; stuckWaitingThresholdMs?: number } = {},
@@ -193,24 +205,32 @@ export async function pollTask(
 /**
  * Convenience: create + poll + return the first result URL.
  *
- * Auto-retries on stuck-in-waiting (kie queue ghost). Splits the total
- * budget across attempts: each attempt gets a short stuck-detection
- * window (so we abandon ghosts fast) plus the remaining budget. Only
- * KieStuckInWaitingError triggers a retry — hard failures (state ===
- * 'fail', HTTP errors, missing resultUrls) are surfaced immediately.
+ * Retries on ANY transient error — the only hard-failure that bubbles
+ * immediately is `KieTaskFailedError` (the task was successfully created,
+ * ran, and returned state === 'fail'). Everything else is treated as
+ * transient and retried:
+ *   - KieStuckInWaitingError (ghost task in the queue)
+ *   - HTTP 502 / 503 / 504 from kie's API or our Railway proxy
+ *   - createTask returning `code !== 200` (e.g. "422 generate playground
+ *     failed, task id is blank" — kie's queue choking under load)
+ *   - Network errors, fetch failures, timeouts
+ *
+ * A short backoff (3s) is added between attempts so we don't slam kie
+ * if it's rate-limiting.
+ *
+ * Budget: 270s total across up to 3 attempts. Each attempt has a 120s
+ * stuck-detection window. The previous version retried only on the
+ * single ghost case and produced visible "task id is blank" / "Error
+ * 502" errors to the user — those are now caught + retried internally.
  */
 export async function generateImage(
   model: string,
   input: KieCreateTaskInput,
 ): Promise<string> {
   const TOTAL_BUDGET_MS = 270_000;
-  // Patience > retry: kie's queue is sometimes legitimately slow (60-100s in
-  // 'waiting' before transitioning to 'queuing'/'generating'). The previous
-  // 50s threshold + 3 retries was producing "stuck in waiting" errors on
-  // tasks that would have succeeded if we'd just waited. Bumped to 120s with
-  // 2 attempts — same total budget, fewer false positives.
   const STUCK_THRESHOLD_MS = 120_000;
-  const MAX_ATTEMPTS = 2;
+  const MAX_ATTEMPTS = 3;
+  const BACKOFF_MS = 3000;
   const startedAt = Date.now();
 
   let lastErr: Error | null = null;
@@ -228,9 +248,9 @@ export async function generateImage(
         stuckWaitingThresholdMs: STUCK_THRESHOLD_MS,
       });
       if (status.state !== 'success') {
-        throw new Error(
-          `kie task failed: ${status.failCode || ''} ${status.failMsg || ''}`.trim(),
-        );
+        // Successful task creation + run, but model returned a fail state.
+        // This is a HARD failure — retrying with the same prompt won't help.
+        throw new KieTaskFailedError(taskId, status.failCode, status.failMsg);
       }
       const url = status.resultUrls?.[0];
       if (!url) throw new Error('kie task succeeded but returned no resultUrls');
@@ -238,14 +258,22 @@ export async function generateImage(
     } catch (err) {
       const e = err as Error;
       lastErr = e;
-      if (e instanceof KieStuckInWaitingError) {
-        console.warn(
-          `[kie] ${e.message} — abandoning and retrying (attempt ${attempt}/${MAX_ATTEMPTS})`,
-        );
-        continue;
+
+      // Hard failure — surface immediately, don't waste retry budget.
+      if (e instanceof KieTaskFailedError) throw e;
+
+      // Everything else is transient (stuck ghost, createTask code != 200,
+      // HTTP 502/503/504, fetch error, etc.). Retry with a short backoff
+      // so we don't hammer kie if it's rate-limiting.
+      const isLastAttempt = attempt === MAX_ATTEMPTS;
+      if (isLastAttempt) {
+        console.warn(`[kie] attempt ${attempt}/${MAX_ATTEMPTS} failed (last attempt): ${e.message}`);
+        break;
       }
-      // Any non-stuck error: don't retry, surface to caller.
-      throw e;
+      console.warn(
+        `[kie] attempt ${attempt}/${MAX_ATTEMPTS} failed: ${e.message} — retrying after ${BACKOFF_MS}ms`,
+      );
+      await new Promise((r) => setTimeout(r, BACKOFF_MS));
     }
   }
   throw lastErr || new Error('kie.generateImage exhausted retries');
