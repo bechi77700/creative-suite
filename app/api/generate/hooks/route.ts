@@ -5,6 +5,7 @@ import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
 import type { VideoAnalysis } from '@/lib/gemini-video';
 import { buildFunnelStageInstruction, type FunnelStage } from '@/lib/funnel-stage';
+import { buildMarketInstruction, type Market } from '@/lib/market';
 
 export const maxDuration = 300;
 
@@ -48,7 +49,7 @@ ${axesLines}`;
 
 export async function POST(req: Request) {
   const body = await req.json();
-  const { projectId, mode, script, instructions, videoAnalysis, videoSource, funnelStage } = body as {
+  const { projectId, mode, script, instructions, videoAnalysis, videoSource, funnelStage, market } = body as {
     projectId: string;
     mode: 'from_brand' | 'from_script' | 'from_video';
     script?: string;
@@ -56,8 +57,10 @@ export async function POST(req: Request) {
     videoAnalysis?: VideoAnalysis | null;
     videoSource?: 'own' | 'competitor' | null;
     funnelStage?: FunnelStage | null;
+    market?: Market | null;
   };
   const funnelBlock = buildFunnelStageInstruction(funnelStage);
+  const marketBlock = buildMarketInstruction(market);
   // Clamp count to a sane range; default to 6 (matches new UI default).
   const requestedCount = Number(body.count);
   const count = Number.isFinite(requestedCount)
@@ -147,6 +150,7 @@ REFERENCE HOOK VIDEO
 ─────────────────────────────────────────────
 ${renderAnalysisForHook(videoAnalysis)}
 ${instructionsSection}
+${marketBlock ? `\n─────────────────────────────────────────────\n${marketBlock}\n─────────────────────────────────────────────\n` : ''}
 ${funnelBlock ? `\n─────────────────────────────────────────────\n${funnelBlock}\n─────────────────────────────────────────────\n` : ''}
 
 ─────────────────────────────────────────────
@@ -259,6 +263,7 @@ GLOBAL KNOWLEDGE: ${knowledgeContext || '(none)'}
 BRAND DOCS: ${brandContext || '(none)'}`;
 
   const variableSuffix2 = `${modeSection}${instructionsSection}
+${marketBlock ? `\n${marketBlock}\n` : ''}
 ${funnelBlock ? `\n${funnelBlock}\n` : ''}
 Generate ${count} diverse hook ideas for Meta Ads cold traffic. Mix of:
 - Written hooks (on-screen text / spoken opening lines)

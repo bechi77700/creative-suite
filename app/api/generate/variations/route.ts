@@ -3,12 +3,14 @@ import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL_FAST, GENERATION_RULES, STATIC_PRODUCT_RULE } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, type KnowledgeModule } from '@/lib/knowledge';
+import { buildMarketInstruction, type Market } from '@/lib/market';
 
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
   const body = await req.json();
-  const { generationId } = body;
+  const { generationId, market } = body as { generationId: string; market?: Market | null };
+  const marketBlock = buildMarketInstruction(market);
 
   const original = await prisma.generation.findUnique({
     where: { id: generationId },
@@ -37,6 +39,7 @@ GLOBAL KNOWLEDGE: ${knowledgeContext || '(none)'}`;
 ${original.output}
 
 ORIGINAL INPUTS: ${original.inputs}
+${marketBlock ? `\n${marketBlock}\n` : ''}
 
 Generate 5 VARIATIONS of this ${moduleLabel}. Each variation must:
 - Keep the same module type and format structure

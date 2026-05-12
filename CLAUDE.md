@@ -125,6 +125,15 @@ For native ads: model is `nano-banana-2`, prompt must start with `1:1 square for
 ### Funnel stage selector
 Used only in **scratch generation** of statics + video. NOT in hooks (UI removed). NOT in native ads (always TOFU). The route helper `buildFunnelStageInstruction(stage)` returns an empty string when no stage is selected, so default behavior is preserved.
 
+### Market selector — optional on every generation route
+Same pattern as funnel stage. `lib/market.ts` exports `MARKETS` (US, UK, CANADA, AUSTRALIA, FRANCE, GERMANY, ITALY, SPAIN, US_HISPANIC), `MARKET_OPTIONS`, `isMarket()`, and `buildMarketInstruction(market | null)`. Returns `''` when null OR when `market === 'US'` (the baseline — picking US is a no-op vs default `GENERATION_RULES`).
+
+When a non-US market is selected, the block is prepended with a hard OVERRIDE header that explicitly supersedes the `US market only` line in `GENERATION_RULES`. The DR fundamentals stay (problem amplification, hard claims, FOMO, proof density) — only the language, currency, and tone calibration localize. FR / DE blocks include explicit anti-US-hyperbole notes because pure US-style copy reads as scam in those markets.
+
+UI: `<MarketSelector />` is a native `<select>` (not chips — 9 options is too many) rendered on every generation page (static-brief, video-script, hooks, native-ads, iterate). `IteratePanel` and `VideoIteratePanel` accept an optional `market` prop so iterations inherit the parent page's market choice.
+
+Image prompts: the localization applies to **on-image overlay text only** — scene description, lighting, materials stay in English (kie.ai models are English-trained). The header in `buildMarketInstruction()` enforces this.
+
 ### Sidebar nav
 When you add a new module page, add an entry to `moduleItems` in `components/Sidebar.tsx`. Icons are inline Lucide-style SVGs at the top of the file — match the existing stroke-1.8 style.
 

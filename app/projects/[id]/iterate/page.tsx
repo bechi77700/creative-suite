@@ -7,6 +7,8 @@ import VideoIteratePanel from '@/components/VideoIteratePanel';
 import MultiImageInput, { RefImage } from '@/components/MultiImageInput';
 import VideoReferenceInput from '@/components/VideoReferenceInput';
 import type { VideoAnalysis } from '@/lib/gemini-video';
+import MarketSelector from '@/components/MarketSelector';
+import type { Market } from '@/lib/market';
 
 type Tab = 'photo' | 'video';
 
@@ -44,6 +46,9 @@ export default function IteratePage({ params }: { params: { id: string } }) {
   const [videoSelectedScript, setVideoSelectedScript] = useState('');
   const [videoPastedScript, setVideoPastedScript] = useState('');
   const [videoAnalysis, setVideoAnalysis] = useState<VideoAnalysis | null>(null);
+
+  // Optional target market — applies to both photo + video iterate flows.
+  const [market, setMarket] = useState<Market | null>(null);
 
   useEffect(() => {
     fetch(`/api/projects/${id}`).then((r) => r.json()).then((d) => setProjectName(d.name));
@@ -88,6 +93,12 @@ export default function IteratePage({ params }: { params: { id: string } }) {
             <p className="text-text-muted text-sm mt-1">
               Generate sibling variations that keep the winning DNA — for photos or video scripts.
             </p>
+          </div>
+
+          {/* Market selector — applies to both tabs. Outside the tab toggle
+              so the choice persists when switching photo ↔ video. */}
+          <div className="card p-4">
+            <MarketSelector value={market} onChange={setMarket} />
           </div>
 
           {/* Tabs */}
@@ -188,6 +199,7 @@ export default function IteratePage({ params }: { params: { id: string } }) {
                     projectId={id}
                     originalPrompt={photoActivePrompt}
                     initialImages={photoRefImages}
+                    market={market}
                     hideClose
                   />
                 </div>
@@ -270,6 +282,7 @@ export default function IteratePage({ params }: { params: { id: string } }) {
                     projectId={id}
                     originalScript={videoActiveScript}
                     videoAnalysis={videoAnalysis}
+                    market={market}
                     hideClose
                   />
                 </div>

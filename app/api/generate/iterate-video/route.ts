@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL_FAST, GENERATION_RULES } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
+import { buildMarketInstruction, type Market } from '@/lib/market';
 import type { VideoAnalysis } from '@/lib/gemini-video';
 
 export const maxDuration = 300;
@@ -70,6 +71,7 @@ export async function POST(req: Request) {
       otherInstructions = '',
       editorInstructions = '',
       count,
+      market,
     }: {
       projectId: string;
       originalScript: string;
@@ -78,7 +80,10 @@ export async function POST(req: Request) {
       otherInstructions?: string;
       editorInstructions?: string;
       count?: number;
+      market?: Market | null;
     } = body;
+
+    const marketBlock = buildMarketInstruction(market);
 
     // Either a pasted script OR a video analysis is required.
     const hasScript = !!originalScript?.trim();
@@ -155,7 +160,7 @@ ITERATION CONFIG
 ─────────────────────────────────────────────
 ${modeBlock}
 Number of siblings to generate: ${n}
-${otherBlock}${editorBlock}
+${marketBlock ? `\n${marketBlock}\n` : ''}${otherBlock}${editorBlock}
 
 ─────────────────────────────────────────────
 HARD RULES (from the SOP)
@@ -164,7 +169,7 @@ HARD RULES (from the SOP)
 - Each sibling varies 1 OR 2 axes — never more.
 - Every axis NOT in the varied list must remain identical to the reference's tagging.
 - Each sibling must clearly differ from the others (different axis combos when in Auto mode; different angles within the same axes when in User-directed mode).
-- Aggressive US direct response — no softening, no hedging.
+- Aggressive direct response${marketBlock ? ' calibrated to the target market above' : ' US-style'} — no softening, no hedging.
 - Pure spoken words and on-screen text only — NO camera directions, NO "[cut to]", NO editor instructions inside the script blocks.
 - No new factual claims unless the user's custom instructions explicitly opened that door — and even then, tag them inline with [NEW CLAIM].
 - Pull all brand specifics (price, ingredients, results, guarantees) from the brand's Saint Graal / project documents only.

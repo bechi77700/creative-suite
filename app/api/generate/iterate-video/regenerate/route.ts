@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL_FAST, GENERATION_RULES } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
+import { buildMarketInstruction, type Market } from '@/lib/market';
 
 export const maxDuration = 300;
 
@@ -14,12 +15,16 @@ export async function POST(req: Request) {
       originalScript,
       currentIteration,
       feedback,
+      market,
     }: {
       projectId: string;
       originalScript: string;
       currentIteration: string;
       feedback: string;
+      market?: Market | null;
     } = body;
+
+    const marketBlock = buildMarketInstruction(market);
 
     if (!originalScript?.trim() || !currentIteration?.trim()) {
       return NextResponse.json({ error: 'originalScript and currentIteration are required' }, { status: 400 });
@@ -58,14 +63,14 @@ ${currentIteration.trim()}
 USER FEEDBACK (apply this as the most important constraint)
 ─────────────────────────────────────────────
 ${feedback?.trim() || '(no specific feedback — just produce a stronger alternative version)'}
-
+${marketBlock ? `\n─────────────────────────────────────────────\n${marketBlock}\n─────────────────────────────────────────────\n` : ''}
 ─────────────────────────────────────────────
 RULES
 ─────────────────────────────────────────────
 - Stay a sibling of the ORIGINAL — do not drift into a completely different concept.
 - Address the user's feedback directly.
 - NO editor instructions, no camera directions — pure spoken words and on-screen text only.
-- Aggressive US direct response.
+- Aggressive direct response${marketBlock ? ' calibrated to the target market above' : ' US-style'}.
 
 OUTPUT — exactly this structure, nothing else:
 

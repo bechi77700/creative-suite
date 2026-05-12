@@ -9,6 +9,7 @@ import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { parseSSE } from '@/lib/streaming';
 import type { VideoAnalysis } from '@/lib/gemini-video';
+import type { Market } from '@/lib/market';
 
 // 10-axis catalog — MUST stay in sync with iterate-video-sop.md
 // (the closed-vocabulary list there). Order matters for the UI.
@@ -52,6 +53,8 @@ interface Props {
   videoAnalysis?: VideoAnalysis | null;
   hideClose?: boolean;
   onClose?: () => void;
+  /** Optional target market — forwarded to /api/generate/iterate-video and /regenerate. */
+  market?: Market | null;
 }
 
 function splitIntoIterations(text: string): { body: string }[] {
@@ -66,6 +69,7 @@ export default function VideoIteratePanel({
   videoAnalysis,
   hideClose,
   onClose,
+  market,
 }: Props) {
   const [axes, setAxes] = useState<Set<string>>(new Set());
   const [otherInstructions, setOtherInstructions] = useState('');
@@ -127,6 +131,7 @@ export default function VideoIteratePanel({
           otherInstructions,
           editorInstructions,
           count: n,
+          market: market ?? null,
         }),
       });
 
@@ -186,6 +191,7 @@ export default function VideoIteratePanel({
           originalScript,
           currentIteration: it.body,
           feedback: it.feedback,
+          market: market ?? null,
         }),
       });
       if (!res.ok) {

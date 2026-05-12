@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL_FAST, GENERATION_RULES } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
+import { buildMarketInstruction, type Market } from '@/lib/market';
 import type { VideoAnalysis } from '@/lib/gemini-video';
 
 export const maxDuration = 300;
@@ -61,13 +62,17 @@ export async function POST(req: Request) {
       additionalContext = '',
       editorInstructions = '',
       count,
+      market,
     }: {
       projectId: string;
       videoAnalysis: VideoAnalysis;
       additionalContext?: string;
       editorInstructions?: string;
       count?: number;
+      market?: Market | null;
     } = body;
+
+    const marketBlock = buildMarketInstruction(market);
 
     if (!videoAnalysis) {
       return new Response(JSON.stringify({ error: 'A video analysis is required (upload a reference video first).' }), {
@@ -120,8 +125,7 @@ ${renderAnalysis(videoAnalysis)}
 GENERATION CONFIG
 ─────────────────────────────────────────────
 Number of adapted scripts to produce: ${n}
-Output language: English (US market)
-${additionalBlock}${editorBlock}
+${marketBlock ? `\n${marketBlock}\n` : 'Output language: English (US market)\n'}${additionalBlock}${editorBlock}
 
 ─────────────────────────────────────────────
 HARD RULES (from the SOP — non-negotiable)
@@ -134,7 +138,7 @@ HARD RULES (from the SOP — non-negotiable)
 - Pull product specifics from the brand's Saint Graal / project documents only. NEVER invent claims, prices, ingredients, results, or guarantees.
 - Translate vertical-specific elements 1:1 (e.g. reference: "my skin texture changed" → adapted for haircare: "my hair density changed"). The function survives; only the noun shifts.
 - Tag every block with the same labels in both phases.
-- Aggressive US direct response — no softening, no hedging.
+- Aggressive direct response${marketBlock ? ' calibrated to the target market above' : ' US-style'} — no softening, no hedging.
 - Pure spoken words and on-screen text only — no camera directions inside script blocks.
 
 ─────────────────────────────────────────────

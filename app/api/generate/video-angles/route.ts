@@ -4,6 +4,7 @@ import { getAnthropic, MODEL, GENERATION_RULES } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
 import { buildFunnelStageInstruction, type FunnelStage } from '@/lib/funnel-stage';
+import { buildMarketInstruction, type Market } from '@/lib/market';
 
 export const maxDuration = 300;
 
@@ -12,13 +13,15 @@ function sse(event: string, data: unknown) {
 }
 
 export async function POST(req: Request) {
-  const { projectId, format, length, funnelStage } = await req.json() as {
+  const { projectId, format, length, funnelStage, market } = await req.json() as {
     projectId: string;
     format: string;
     length: string;
     funnelStage?: FunnelStage | null;
+    market?: Market | null;
   };
   const funnelBlock = buildFunnelStageInstruction(funnelStage);
+  const marketBlock = buildMarketInstruction(market);
 
   const project = await prisma.brandProject.findUnique({
     where: { id: projectId },
@@ -50,6 +53,7 @@ ${saintGraalContent}`;
 
   const variableSuffix = `VIDEO FORMAT: ${format}
 TARGET LENGTH: ${length}
+${marketBlock}
 ${funnelBlock}
 
 ─────────────────────────────────────────────
@@ -66,7 +70,7 @@ For each angle, output:
 - Why it works: [psychological mechanism]
 - Hook preview: [first 2-3 seconds in words]
 
-Make them diverse: mix pain points, mechanism, results, social proof, story, comparison. Aggressive US direct response only.`;
+Make them diverse: mix pain points, mechanism, results, social proof, story, comparison. Aggressive direct response${marketBlock ? ' calibrated to the target market above' : ' US-style'}.`;
 
   const anthropic = getAnthropic();
   const encoder = new TextEncoder();

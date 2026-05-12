@@ -15,6 +15,8 @@ import SaintGraalGate from '@/components/SaintGraalGate';
 import ReactMarkdown from 'react-markdown';
 import { parseSSE } from '@/lib/streaming';
 import { addWinner, removeWinner } from '@/lib/winners';
+import MarketSelector from '@/components/MarketSelector';
+import type { Market } from '@/lib/market';
 
 interface Headline {
   index: number;
@@ -108,6 +110,8 @@ export default function NativeAdsPage({ params }: PageProps) {
 
   const [product, setProduct] = useState('');
   const [additionalContext, setAdditionalContext] = useState('');
+  // Optional target market — applies to native-ad copy, alt-image, headlines.
+  const [market, setMarket] = useState<Market | null>(null);
 
   // Paste-existing-copy state
   const [pastedCopy, setPastedCopy] = useState('');
@@ -236,6 +240,7 @@ export default function NativeAdsPage({ params }: PageProps) {
           projectId: id,
           product: product.trim(),
           additionalContext: additionalContext.trim() || undefined,
+          market,
         }),
       });
 
@@ -314,6 +319,7 @@ export default function NativeAdsPage({ params }: PageProps) {
           projectId: id,
           adCopy,
           previousBriefs: opts?.previousBriefsOverride ?? briefHistory,
+          market,
         }),
       });
       const data = await res.json();
@@ -426,6 +432,7 @@ export default function NativeAdsPage({ params }: PageProps) {
           angle: hlAngle.trim() || undefined,
           context: hlContext.trim() || undefined,
           count: hlCount,
+          market,
         }),
       });
       const data = await res.json();
@@ -574,6 +581,8 @@ export default function NativeAdsPage({ params }: PageProps) {
                       Laisse vide pour laisser Claude choisir l'angle le plus fort dans le Saint Graal.
                     </p>
                   </div>
+
+                  <MarketSelector value={market} onChange={setMarket} />
 
                   <div className="flex items-center justify-between pt-1">
                     <p className="text-text-muted text-xs">

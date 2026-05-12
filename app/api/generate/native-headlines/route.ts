@@ -29,6 +29,7 @@ import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL_SMART, GENERATION_RULES } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
+import { buildMarketInstruction, type Market } from '@/lib/market';
 
 export const maxDuration = 120;
 
@@ -84,6 +85,7 @@ export async function POST(req: Request) {
       angle,
       context,
       count = 8,
+      market,
     } = body as {
       projectId: string;
       mode: 'from_copy' | 'standalone';
@@ -92,7 +94,10 @@ export async function POST(req: Request) {
       angle?: string;
       context?: string;
       count?: number;
+      market?: Market | null;
     };
+
+    const marketBlock = buildMarketInstruction(market);
 
     if (!projectId) {
       return NextResponse.json({ error: 'projectId is required.' }, { status: 400 });
@@ -164,14 +169,12 @@ TASK — GENERATE NATIVE-AD HEADLINES (SOP §7)
 ─────────────────────────────────────────────
 
 ${sourceBlock}
-
+${marketBlock ? `\n─────────────────────────────────────────────\n${marketBlock}\n─────────────────────────────────────────────\n` : ''}
 ─────────────────────────────────────────────
 RULES — apply SOP §7 strictly
 ─────────────────────────────────────────────
 
-1. LANGUAGE — infer from the Saint Graal market. Match the brand's market
-   language (FR for French brands, EN for US brands, etc.). One language
-   per response.
+1. LANGUAGE — ${marketBlock ? 'follow the MARKET LOCALIZATION block above (source of truth).' : 'infer from the Saint Graal market. Match the brand\'s market language (FR for French brands, EN for US brands, etc.).'} One language per response.
 
 2. LENGTH — every headline is 3 to 12 words. Ideally 5-8.
 

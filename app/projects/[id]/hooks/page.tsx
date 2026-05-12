@@ -7,6 +7,8 @@ import ReactMarkdown from 'react-markdown';
 import { addWinner, removeWinner, parseNumberedBlocks } from '@/lib/winners';
 import VideoReferenceInput from '@/components/VideoReferenceInput';
 import type { VideoAnalysis } from '@/lib/gemini-video';
+import MarketSelector from '@/components/MarketSelector';
+import type { Market } from '@/lib/market';
 
 type Mode = 'from_script' | 'from_brand' | 'from_video';
 
@@ -36,6 +38,8 @@ export default function HookGeneratorPage({ params }: { params: { id: string } }
   const [videoAnalysis, setVideoAnalysis] = useState<VideoAnalysis | null>(null);
   const [videoSource, setVideoSource] = useState<'own' | 'competitor'>('competitor');
   const [instructions, setInstructions] = useState('');
+  // Optional target market — applies to all 3 hook modes + variations.
+  const [market, setMarket] = useState<Market | null>(null);
   const [runs, setRuns] = useState<Run[]>([]);
 
   useEffect(() => {
@@ -78,6 +82,7 @@ export default function HookGeneratorPage({ params }: { params: { id: string } }
           instructions,
           videoAnalysis: mode === 'from_video' ? videoAnalysis : null,
           videoSource: mode === 'from_video' ? videoSource : null,
+          market,
         }),
       });
       const data = await res.json();
@@ -133,7 +138,7 @@ export default function HookGeneratorPage({ params }: { params: { id: string } }
     const res = await fetch('/api/generate/variations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ generationId }),
+      body: JSON.stringify({ generationId, market }),
     });
     const data = await res.json();
     updateRun(runId, { variationsOutput: data.output || '', variationsLoading: false });
@@ -317,6 +322,8 @@ export default function HookGeneratorPage({ params }: { params: { id: string } }
                 onChange={(e) => setInstructions(e.target.value)}
               />
             </div>
+
+            <MarketSelector value={market} onChange={setMarket} />
           </div>
 
           <div className="px-5 py-4 border-t border-bg-border space-y-2">

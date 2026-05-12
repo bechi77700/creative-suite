@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL_FAST, GENERATION_RULES, STATIC_PRODUCT_RULE, STATIC_VISUAL_DIRECTION_RULE } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
+import { buildMarketInstruction, type Market } from '@/lib/market';
 
 interface BatchRow {
   angle: string;
@@ -16,12 +17,15 @@ export const maxDuration = 300;
 
 export async function POST(req: Request) {
   const body = await req.json();
-  const { projectId, product, format, rows } = body as {
+  const { projectId, product, format, rows, market } = body as {
     projectId: string;
     product: string;
     format: string;
     rows: BatchRow[];
+    market?: Market | null;
   };
+
+  const marketBlock = buildMarketInstruction(market);
 
   const project = await prisma.brandProject.findUnique({
     where: { id: projectId },
@@ -54,6 +58,7 @@ BRAND DOCS: ${brandContext || '(none)'}`;
 - Hook Type: ${row.hook_type}
 - Audience: ${row.audience}
 - Version: ${row.version}
+${marketBlock ? `\n${marketBlock}\n` : ''}
 
 Use the exact output structure:
 ## CREATIVE BRIEF

@@ -21,6 +21,7 @@ import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL_SMART, GENERATION_RULES } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
+import { buildMarketInstruction, type Market } from '@/lib/market';
 
 export const maxDuration = 120;
 
@@ -31,11 +32,14 @@ interface PrevBrief {
 }
 
 export async function POST(req: Request) {
-  const { projectId, adCopy, previousBriefs } = (await req.json()) as {
+  const { projectId, adCopy, previousBriefs, market } = (await req.json()) as {
     projectId: string;
     adCopy: string;
     previousBriefs?: PrevBrief[];
+    market?: Market | null;
   };
+
+  const marketBlock = buildMarketInstruction(market);
 
   if (!projectId || !adCopy?.trim()) {
     return NextResponse.json(
@@ -106,7 +110,7 @@ AD COPY (la native ad publiée, source de vérité pour les moments à illustrer
 ${adCopy.trim()}
 """
 
-${previousBlock}─────────────────────────────────────────────
+${previousBlock}${marketBlock ? `─────────────────────────────────────────────\n${marketBlock}\n─────────────────────────────────────────────\n\n` : ''}─────────────────────────────────────────────
 RULES — APPLIQUE LE SOP §6 STRICTEMENT
 ─────────────────────────────────────────────
 

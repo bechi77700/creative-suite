@@ -4,14 +4,16 @@ import { getAnthropic, MODEL, GENERATION_RULES } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
 import { buildFunnelStageInstruction } from '@/lib/funnel-stage';
+import { buildMarketInstruction } from '@/lib/market';
 
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
   try {
   const body = await req.json();
-  const { projectId, format, length, angle, additionalContext, editorInstructions, previousOutput, feedback, funnelStage } = body;
+  const { projectId, format, length, angle, additionalContext, editorInstructions, previousOutput, feedback, funnelStage, market } = body;
   const funnelBlock = buildFunnelStageInstruction(funnelStage);
+  const marketBlock = buildMarketInstruction(market);
 
   const project = await prisma.brandProject.findUnique({
     where: { id: projectId },
@@ -65,6 +67,7 @@ ${editorInstructions.trim()}` : '';
 TARGET LENGTH: ${length} (~${wordCount} words of spoken script)
 ANGLE: ${angle}
 ${additionalContext ? `ADDITIONAL CONTEXT: ${additionalContext}` : ''}
+${marketBlock}
 ${funnelBlock}
 ${editorBlock}
 ${refineSection}
@@ -73,7 +76,7 @@ Write a complete, ready-to-shoot video ad script.
 
 RULES:
 - NO editor instructions, no camera directions, no "[cut to]" — pure spoken words and on-screen text only
-- Aggressive US direct response — pain points pushed to maximum
+- Aggressive direct response${marketBlock ? ' calibrated to the target market above' : ' US-style'} — pain points pushed to maximum
 - Hook must stop scroll in the first 2 seconds
 - CTA is direct and urgent
 - Structure clearly with: HOOK / BODY / CTA sections

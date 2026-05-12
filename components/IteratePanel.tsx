@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import PromptImageGenerator from './PromptImageGenerator';
 import MultiImageInput, { RefImage } from './MultiImageInput';
 import { parseSSE, extractClosedCodeBlocks } from '@/lib/streaming';
+import type { Market } from '@/lib/market';
 
 // Image iterations are always rendered with nano-banana-2 (with the ref
 // image forwarded so it's faithful to the source).
@@ -58,6 +59,9 @@ interface Props {
   onClose?: () => void;
   /** Hide the close button (when used standalone on its own page) */
   hideClose?: boolean;
+  /** Optional target market — forwarded to /api/generate/iterate so the
+   *  iterations respect the parent page's market choice. */
+  market?: Market | null;
 }
 
 export default function IteratePanel({
@@ -67,6 +71,7 @@ export default function IteratePanel({
   initialImages,
   onClose,
   hideClose,
+  market,
 }: Props) {
   const refs: RefImage[] =
     initialImages && initialImages.length > 0
@@ -205,6 +210,7 @@ export default function IteratePanel({
           otherInstructions,
           count: n,
           mode,
+          market: market ?? null,
         }),
       });
 

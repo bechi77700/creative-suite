@@ -5,6 +5,7 @@ import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
 import { buildConceptInstruction, type SelectedConcept } from '@/lib/static-ad-concepts';
 import { buildFunnelStageInstruction, type FunnelStage } from '@/lib/funnel-stage';
+import { buildMarketInstruction, type Market } from '@/lib/market';
 
 export const maxDuration = 300;
 
@@ -40,6 +41,7 @@ export async function POST(req: Request) {
       competitorImages,
       concept,
       funnelStage,
+      market,
     } = body as {
       projectId: string;
       product: string;
@@ -52,9 +54,11 @@ export async function POST(req: Request) {
       competitorImages?: Array<{ base64: string; mimeType?: string }>;
       concept?: SelectedConcept | null;
       funnelStage?: FunnelStage | null;
+      market?: Market | null;
     };
 
     const funnelBlock = buildFunnelStageInstruction(funnelStage);
+    const marketBlock = buildMarketInstruction(market);
 
     // Normalize competitor screenshots: new array shape + legacy single fields
     const competitorRefs: Array<{ base64: string; mimeType: string }> = [];
@@ -131,6 +135,7 @@ ${brandContext || '(none uploaded yet)'}`;
 
 PRODUCT: ${product}
 ${additionalContext ? `OPTIONAL INSTRUCTIONS FROM USER: ${additionalContext}` : ''}
+${marketBlock}
 ${funnelBlock}
 ${diversityRule}
 
@@ -188,11 +193,12 @@ ${Array.from({ length: n }, (_, i) => `
       // because the concept itself dictates the format.
       const conceptBlock = buildConceptInstruction(concept);
 
-      variableSuffix = `You are the world's best creative strategist for Meta Ads cold traffic on the US market.
+      variableSuffix = `You are the world's best creative strategist for Meta Ads cold traffic${marketBlock ? '' : ' on the US market'}.
 
 PRODUCT: ${product}
 ${angleInstruction}
 ${additionalContext ? `ADDITIONAL CONTEXT: ${additionalContext}` : ''}
+${marketBlock}
 ${funnelBlock}
 ${conceptBlock}
 ${conceptBlock ? '' : diversityRule}
@@ -279,7 +285,7 @@ ${Array.from({ length: n }, (_, i) => `
             data: {
               projectId,
               module: 'static',
-              inputs: JSON.stringify({ product, count: n, mode, angle: angle || null, additionalContext, concept: concept || null, funnelStage: funnelStage || null }),
+              inputs: JSON.stringify({ product, count: n, mode, angle: angle || null, additionalContext, concept: concept || null, funnelStage: funnelStage || null, market: market || null }),
               output: fullText,
             },
           });

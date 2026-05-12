@@ -10,6 +10,8 @@ import ReactMarkdown from 'react-markdown';
 import { STATIC_AD_FAMILIES, SEASONAL_FAMILY, type SelectedConcept } from '@/lib/static-ad-concepts';
 import FunnelStageSelector from '@/components/FunnelStageSelector';
 import type { FunnelStage } from '@/lib/funnel-stage';
+import MarketSelector from '@/components/MarketSelector';
+import type { Market } from '@/lib/market';
 
 type Mode = 'clone' | 'scratch';
 
@@ -119,6 +121,10 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
 
   // Optional funnel stage (TOFU / MOFU / BOFU). Null = AI decides freely.
   const [funnelStage, setFunnelStage] = useState<FunnelStage | null>(null);
+
+  // Optional target market. Null = US default (current behavior).
+  // Applies to BOTH modes (scratch + clone).
+  const [market, setMarket] = useState<Market | null>(null);
 
   const selectedFamily = STATIC_AD_FAMILIES.find((f) => f.name === conceptFamily) || null;
 
@@ -277,6 +283,7 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
           competitorImages: competitorRefs,
           concept,
           funnelStage: mode === 'scratch' ? funnelStage : null,
+          market,
         }),
       });
 
@@ -583,6 +590,9 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
               </>
             )}
 
+            {/* ── MARKET SELECTOR (shared across both modes) ── */}
+            <MarketSelector value={market} onChange={setMarket} />
+
             {/* ── IMAGE GENERATION SETTINGS (shared) ── */}
             <div className="border-t border-bg-border pt-5 space-y-4">
               <div>
@@ -674,6 +684,7 @@ export default function StaticBriefPage({ params }: { params: { id: string } }) 
               run={run}
               projectId={id}
               initialImagesForChild={initialImagesForChild}
+              market={market}
               onToggleWinner={() => run.generationId && toggleWinner(run.id, run.generationId)}
               onDelete={() => deleteRun(run.id)}
               onCopyAll={() => copyText(run.streamedText)}
@@ -698,6 +709,7 @@ interface RunCardProps {
   run: Run;
   projectId: string;
   initialImagesForChild: RefImage[];
+  market: Market | null;
   onToggleWinner: () => void;
   onDelete: () => void;
   onCopyAll: () => void;
@@ -720,6 +732,7 @@ function RunCardImpl({
   run,
   projectId,
   initialImagesForChild,
+  market,
   onToggleWinner,
   onDelete,
   onCopyAll,
@@ -843,6 +856,7 @@ function RunCardImpl({
                                 projectId={projectId}
                                 originalPrompt={promptText}
                                 initialImages={initialImagesForChild}
+                                market={market}
                                 onClose={() => onSetIterating(null)}
                               />
                             )}
@@ -925,6 +939,7 @@ const RunCard = memo(RunCardImpl, (prev, next) => {
   return (
     prev.run === next.run &&
     prev.projectId === next.projectId &&
-    prev.initialImagesForChild === next.initialImagesForChild
+    prev.initialImagesForChild === next.initialImagesForChild &&
+    prev.market === next.market
   );
 });

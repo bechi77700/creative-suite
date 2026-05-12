@@ -10,6 +10,8 @@ import { parseSSE } from '@/lib/streaming';
 import type { VideoAnalysis } from '@/lib/gemini-video';
 import FunnelStageSelector from '@/components/FunnelStageSelector';
 import type { FunnelStage } from '@/lib/funnel-stage';
+import MarketSelector from '@/components/MarketSelector';
+import type { Market } from '@/lib/market';
 
 // Parse the angles markdown returned by /api/generate/video-angles into
 // individual angle blocks (one per checkbox). Each block looks like:
@@ -131,6 +133,7 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
           additionalContext: cloneAdditional,
           editorInstructions,
           count: n,
+          market,
         }),
       });
 
@@ -178,6 +181,8 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
   const [selectedFormat, setSelectedFormat] = useState('');
   const [selectedLength, setSelectedLength] = useState('');
   const [funnelStage, setFunnelStage] = useState<FunnelStage | null>(null);
+  // Optional target market — applies to angles, scripts, clone & adapt, refine, variations.
+  const [market, setMarket] = useState<Market | null>(null);
   const [angles, setAngles] = useState('');
   const [anglesLoading, setAnglesLoading] = useState(false);
   const [selectedAngle, setSelectedAngle] = useState('');
@@ -227,7 +232,7 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
       const res = await fetch('/api/generate/video-angles', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: id, format: selectedFormat, length: selectedLength, funnelStage }),
+        body: JSON.stringify({ projectId: id, format: selectedFormat, length: selectedLength, funnelStage, market }),
       });
 
       if (!res.ok || !res.body) {
@@ -278,6 +283,7 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
           additionalContext,
           editorInstructions,
           funnelStage,
+          market,
         }),
       });
       const data = await res.json();
@@ -386,6 +392,7 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
           editorInstructions,
           previousOutput: run.output,
           feedback: run.feedback,
+          market,
         }),
       });
       const data = await res.json();
@@ -412,7 +419,7 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
     const res = await fetch('/api/generate/variations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ generationId }),
+      body: JSON.stringify({ generationId, market }),
     });
     const data = await res.json();
     updateRun(runId, { variationsOutput: data.output || '', variationsLoading: false });
@@ -574,6 +581,7 @@ export default function VideoScriptPage({ params }: { params: { id: string } }) 
                   <>
                     <div className="mt-3">
                       <FunnelStageSelector value={funnelStage} onChange={setFunnelStage} />
+                      <MarketSelector value={market} onChange={setMarket} className="mt-3" />
                     </div>
                     <button
                       onClick={fetchAngles}

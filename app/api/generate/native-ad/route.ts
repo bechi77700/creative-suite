@@ -30,6 +30,7 @@ import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL_SMART, GENERATION_RULES } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
+import { buildMarketInstruction, type Market } from '@/lib/market';
 
 export const maxDuration = 300;
 
@@ -38,11 +39,14 @@ function sse(event: string, data: unknown) {
 }
 
 export async function POST(req: Request) {
-  const { projectId, product, additionalContext } = (await req.json()) as {
+  const { projectId, product, additionalContext, market } = (await req.json()) as {
     projectId: string;
     product: string;
     additionalContext?: string;
+    market?: Market | null;
   };
+
+  const marketBlock = buildMarketInstruction(market);
 
   if (!projectId || !product?.trim()) {
     return NextResponse.json(
@@ -92,7 +96,7 @@ TASK — WRITE ONE COMPLETE NATIVE AD
 PRODUCT TO ADVERTISE:
 ${product.trim()}
 
-${additionalContext?.trim() ? `ADDITIONAL CONTEXT / ANGLE DIRECTION:\n${additionalContext.trim()}\n\n` : ''}─────────────────────────────────────────────
+${additionalContext?.trim() ? `ADDITIONAL CONTEXT / ANGLE DIRECTION:\n${additionalContext.trim()}\n\n` : ''}${marketBlock ? `─────────────────────────────────────────────\n${marketBlock}\n─────────────────────────────────────────────\n\n` : ''}─────────────────────────────────────────────
 RULES (non-negotiable)
 ─────────────────────────────────────────────
 1. FOLLOW THE SOP. The NATIVE ADS SOP above is the source of truth for the
@@ -101,9 +105,7 @@ RULES (non-negotiable)
    references. Invent a new character, a new authority, a new pivot moment,
    a new mechanism story.
 
-2. LANGUAGE & MARKET. Infer language and market from the Saint Graal. The ad
-   must read as if written by a native speaker of that market, in the
-   register of an editorial / first-person testimonial — not an ad.
+2. LANGUAGE & MARKET. ${marketBlock ? 'Follow the MARKET LOCALIZATION block above — it is the source of truth, overrides the Saint Graal language default.' : 'Infer language and market from the Saint Graal.'} The ad must read as if written by a native speaker of that market, in the register of an editorial / first-person testimonial — not an ad.
 
 3. AWARENESS. Default to TOFU (problem-aware → solution-aware). The reader
    does not yet know your product. The ad earns the click by telling a story.
@@ -299,7 +301,7 @@ réflexe(s) parmi les 4 elle déclenche.]`;
             data: {
               projectId,
               module: 'native',
-              inputs: JSON.stringify({ product, additionalContext }),
+              inputs: JSON.stringify({ product, additionalContext, market: market || null }),
               output: fullOutput,
             },
           });

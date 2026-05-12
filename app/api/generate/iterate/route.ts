@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { getAnthropic, MODEL_FAST, GENERATION_RULES, STATIC_PRODUCT_RULE, STATIC_VISUAL_DIRECTION_RULE } from '@/lib/anthropic';
 import { buildCachedUserContent } from '@/lib/prompt-cache';
 import { buildGlobalKnowledgeBlock, buildBrandDocumentsBlock } from '@/lib/knowledge';
+import { buildMarketInstruction, type Market } from '@/lib/market';
 
 export const maxDuration = 300;
 
@@ -45,6 +46,7 @@ export async function POST(req: Request) {
       otherInstructions = '',
       count,
       mode = 'manual',
+      market,
     }: {
       projectId: string;
       originalPrompt?: string;
@@ -55,7 +57,10 @@ export async function POST(req: Request) {
       otherInstructions?: string;
       count?: number;
       mode?: 'auto' | 'manual';
+      market?: Market | null;
     } = body;
+
+    const marketBlock = buildMarketInstruction(market);
 
     // Normalize all refs (new array shape + legacy single fields)
     const refs: Array<{ base64: string; mimeType: string }> = [];
@@ -155,7 +160,7 @@ ${STATIC_PRODUCT_RULE}
 ${STATIC_VISUAL_DIRECTION_RULE}`;
 
     const variableSuffix = `${sourceBlock}
-
+${marketBlock ? `\n─────────────────────────────────────────────\n${marketBlock}\n─────────────────────────────────────────────\n` : ''}
 ─────────────────────────────────────────────
 ${mode === 'auto' ? 'ITERATION INSTRUCTIONS — AUTO' : 'ITERATION STRATEGIES TO APPLY'}
 ─────────────────────────────────────────────
