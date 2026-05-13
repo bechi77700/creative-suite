@@ -127,6 +127,20 @@ RULES (non-negotiable)
 8. CTA must feel earned, not pushed. A soft pivot to "here's where I got it"
    — never "BUY NOW LIMITED OFFER". Optional 1-2 P.S. at the end.
 
+9. AD NAME (META). At the very top of your output, BEFORE the editorial title,
+   emit ONE line in this exact format:
+       **Ad Name (Meta):** <short angle-focused label>
+   - 2 to 5 words. English regardless of the market language (it's an
+     internal label for Meta Ads Manager, not user-facing copy).
+     If the brand operates only in non-English markets and the user
+     explicitly asked for a localized name, follow that override.
+   - Captures the ANGLE / concept of THIS specific ad in shorthand.
+     Examples: "The Insider Who Quit" · "Chicken/Kid hands-free" ·
+     "60+ Joint Mechanism" · "Apple Notes Reveal" · "Pharmacist Confession".
+   - No quotes, no period, no emojis, no brand name (the brand is
+     implied — this is a within-account label that differentiates
+     creatives, not identifies the brand).
+
 ─────────────────────────────────────────────
 🔥 RULE #0 — VISUAL FORMATTING (the most important rule of the SOP)
 ─────────────────────────────────────────────
@@ -211,6 +225,12 @@ APP-SCREENSHOT FORMATS — RENDER AS THE APP, NOT A PHONE (NON-NEGOTIABLE):
 ─────────────────────────────────────────────
 OUTPUT FORMAT
 ─────────────────────────────────────────────
+
+Start the response with the Meta Ads label on a single line — this is line 1, no preamble before it, no blank line above:
+
+**Ad Name (Meta):** <short angle-focused label, 2-5 words, English>
+
+Then a blank line, then the editorial title:
 
 # [TITRE / HEADLINE DE LA NATIVE AD]
 *Sous-titre éditorial style si pertinent*

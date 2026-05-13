@@ -39,6 +39,9 @@ interface PageProps {
 // partial or empty — that's fine, the parser returns null fields.
 
 interface ParsedOutput {
+  /** Short Meta Ads label parsed from the very first line ("**Ad Name (Meta):** X"). */
+  adName: string;
+  /** Ad copy with the Ad Name line stripped (so it doesn't render twice). */
   adCopy: string;
   brief: {
     concept: string;
@@ -48,15 +51,30 @@ interface ParsedOutput {
   } | null;
 }
 
+// Regex for the Ad Name line. Tolerates extra whitespace, optional bold markers,
+// and trailing punctuation. Captures group 1 = the label itself.
+const AD_NAME_RE = /^\s*\*\*\s*Ad Name(?:\s*\(Meta\))?\s*:?\s*\*\*\s*:?\s*([^\n*][^\n]*?)\s*\*?\*?\s*$/im;
+
 function parseOutput(md: string): ParsedOutput {
+  // Pull the ad name from the very top of the markdown, then strip it so the
+  // copy card doesn't render a duplicate inline. We do this BEFORE the
+  // IMAGE BRIEF split so the regex only scans the first few lines.
+  let adName = '';
+  let mdAfterName = md;
+  const nameMatch = md.match(AD_NAME_RE);
+  if (nameMatch && nameMatch.index !== undefined) {
+    adName = nameMatch[1].trim();
+    mdAfterName = (md.slice(0, nameMatch.index) + md.slice(nameMatch.index + nameMatch[0].length)).replace(/^\n+/, '');
+  }
+
   // Split at the first "# IMAGE BRIEF" header (with or without parens after).
   const splitRe = /\n#+\s*IMAGE BRIEF[^\n]*\n/i;
-  const match = md.match(splitRe);
+  const match = mdAfterName.match(splitRe);
   if (!match || match.index === undefined) {
-    return { adCopy: md, brief: null };
+    return { adName, adCopy: mdAfterName, brief: null };
   }
-  const adCopy = md.slice(0, match.index).trim();
-  const briefRaw = md.slice(match.index + match[0].length).trim();
+  const adCopy = mdAfterName.slice(0, match.index).trim();
+  const briefRaw = mdAfterName.slice(match.index + match[0].length).trim();
 
   // Within the brief, pull out the three labeled fields. The model uses
   // "**Concept de l'image**", "**Prompt Nanobanana**", "**Pourquoi ...**".
@@ -70,6 +88,7 @@ function parseOutput(md: string): ParsedOutput {
   const why = extractField(briefRaw, /\*\*Pourquoi[^*]*\*\*\s*:?\s*([\s\S]*?)$/i);
 
   return {
+    adName,
     adCopy,
     brief: { concept, prompt, why, raw: briefRaw },
   };
@@ -121,6 +140,7 @@ export default function NativeAdsPage({ params }: PageProps) {
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
   const [cleanCopied, setCleanCopied] = useState(false);
+  const [adNameCopied, setAdNameCopied] = useState(false);
   const [promptCopied, setPromptCopied] = useState(false);
 
   // Image generation (kie.ai, fired automatically once the text stream ends).
@@ -373,6 +393,17 @@ export default function NativeAdsPage({ params }: PageProps) {
       await navigator.clipboard.writeText(parsed.adCopy);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const copyAdName = async () => {
+    if (!parsed.adName) return;
+    try {
+      await navigator.clipboard.writeText(parsed.adName);
+      setAdNameCopied(true);
+      setTimeout(() => setAdNameCopied(false), 1500);
     } catch {
       /* ignore */
     }
@@ -638,6 +669,32 @@ export default function NativeAdsPage({ params }: PageProps) {
               <div className="mt-5 border border-accent-red/40 bg-accent-red/5 rounded-lg px-4 py-3">
                 <p className="text-accent-red text-sm font-medium">Erreur</p>
                 <p className="text-text-secondary text-sm mt-1">{error}</p>
+              </div>
+            )}
+
+            {/* ─── Ad Name (Meta) ───────────────────────────────────────────
+                Short angle-focused label for Meta Ads Manager. Parsed from
+                the very first line of the model output ("**Ad Name (Meta):**
+                X") and surfaced with a copy button so the user can paste it
+                directly into the ad's name field in Meta Ads. Hidden until
+                the line is actually parsed (avoids flicker mid-stream). */}
+            {parsed.adName && (
+              <div className="mt-6 card p-4 md:p-5 flex items-center gap-4 border-accent-violet/30 bg-accent-violet/[0.04]">
+                <div className="flex-1 min-w-0">
+                  <p className="text-text-muted text-[10px] uppercase tracking-widest mb-1">
+                    Ad Name <span className="normal-case text-text-muted">(paste into Meta Ads Manager)</span>
+                  </p>
+                  <p className="text-text-primary text-base font-semibold truncate" title={parsed.adName}>
+                    {parsed.adName}
+                  </p>
+                </div>
+                <button
+                  onClick={copyAdName}
+                  className="btn-secondary text-xs flex-shrink-0"
+                  title="Copy the ad name to clipboard"
+                >
+                  {adNameCopied ? '✓ Copié' : 'Copier'}
+                </button>
               </div>
             )}
 
